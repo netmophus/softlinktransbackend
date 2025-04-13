@@ -86,6 +86,11 @@ const formatPhoneNumber = (phone) => phone.replace(/\s+/g, "").trim(); // Suppri
 export const register = async (req, res) => {
   const { name, phone, password, role } = req.body;
 
+  const generateOTP = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString(); // Exemple : "583194"
+  };
+  
+
   try {
       console.log("📥 Données reçues :", { name, phone, password, role });
 
@@ -112,6 +117,13 @@ export const register = async (req, res) => {
       }
       console.log("🔢 PIN généré :", pin);
 
+
+      // ✅ Générer un OTP
+const otp = generateOTP();
+const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // expire dans 5 minutes
+console.log("🔐 OTP généré :", otp);
+
+
     // ✅ Créer un nouvel utilisateur
 user = new User({
   name,
@@ -121,7 +133,9 @@ user = new User({
   role,
   virtualAccount: { balance: 0, currency: "XOF" },
   isActive: true,
-  isActivated: false
+  isActivated: false,
+  otpCode: otp,
+  otpExpiresAt,
 });
 
 // ✅ Sauvegarde de l'utilisateur - Cela va automatiquement hacher le PIN grâce à `UserSchema.pre("save")`
@@ -141,7 +155,10 @@ console.log("✅ Utilisateur enregistré avec succès :", user);
       console.log("📝 Création de l'utilisateur enregistrée dans ActivityLog.");
 
       // ✅ Envoyer le PIN par SMS - C'est risqué en clair, à éviter.
-     await sendSMS(formattedPhone, `Votre code PIN temporaire SOFTLINK Transfert est : ${pin}. Veuillez le concervez.`);
+      await sendSMS(formattedPhone, 
+        `Bienvenue sur SOFTLINK TRANSFERT.\nVotre PIN temporaire : ${pin}\nVotre code de vérification : ${otp} (valide 5 minutes)`
+      );
+      
       console.log("📤 SMS envoyé au :", formattedPhone);
 
       res.status(201).json({ msg: "Inscription réussie. Votre PIN  a été envoyé par SMS." });
@@ -159,68 +176,6 @@ console.log("✅ Utilisateur enregistré avec succès :", user);
 // Fonction pour formater le numéro de téléphone
 
 // 🔹 CONNEXION AVEC OTP
-// export const login = async (req, res) => {
-//   const { phone, password, pin, method = "otp" } = req.body; // On accepte aussi le PIN en option
-//   console.log("📥 Données reçues pour connexion :", req.body);
-
-//   try {
-//     const formattedPhone = formatPhoneNumber(phone);
-//     const user = await User.findOne({ phone: formattedPhone });
-//     if (!user) return res.status(400).json({ msg: "Utilisateur introuvable." });
-
-//     if (!user.isActive) {
-//       return res.status(403).json({ msg: "Compte désactivé. Contactez l'administrateur." });
-//     }
-
-
-//     if (!user.isActivated) {
-//       return res.status(403).json({ msg: "Votre compte n'est pas activé. Veuillez contacter votre superviseur." });
-//   }
-  
-
-//     if (method === "otp") {
-//       // Vérification du mot de passe
-//       const isMatch = await bcrypt.compare(password, user.password);
-//       if (!isMatch) return res.status(400).json({ msg: "Mot de passe incorrect." });
-
-//       // Génération de l'OTP et de sa date d'expiration (5 minutes)
-//       const otp = generateOTP();
-//       const otpExpiration = new Date(Date.now() + 5 * 60 * 1000);
-
-//       user.otp = otp;
-//       user.otpExpiration = otpExpiration;
-//       await user.save();
-
-//       console.log("🔢 OTP généré :", otp);
-
-//       // Préparer le message SMS
-//       const message = `Votre code OTP est : ${otp}. Il est valable 5 minutes.`;
-//       const smsResponse = await sendSMS(formattedPhone, message);
-
-//       if (smsResponse.success) {
-//         console.log("✅ SMS envoyé avec succès !");
-//         return res.status(200).json({ msg: "OTP envoyé à votre téléphone." });
-//       } else {
-//         console.error("❌ Erreur lors de l'envoi de l'OTP par SMS.");
-//         return res.status(500).json({ msg: "Erreur lors de l'envoi de l'OTP par SMS." });
-//       }
-//     } 
-//     else if (method === "pin") { // Connexion par PIN
-//       const isPinMatch = await bcrypt.compare(pin, user.pin);
-//       if (!isPinMatch) return res.status(400).json({ msg: "PIN incorrect." });
-
-//       console.log("✅ Connexion réussie avec PIN pour l'utilisateur :", user.phone);
-//       return res.status(200).json({ msg: "Connexion réussie avec PIN." });
-//     } 
-//     else {
-//       return res.status(400).json({ msg: "Méthode de connexion invalide." });
-//     }
-
-//   } catch (error) {
-//     console.error("❌ Erreur lors de la connexion :", error);
-//     return res.status(500).json({ msg: "Erreur du serveur." });
-//   }
-// };
 
 export const login = async (req, res) => {
   const { phone, password, pin, method = "otp" } = req.body;
