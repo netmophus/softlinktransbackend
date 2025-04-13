@@ -134,8 +134,9 @@ user = new User({
   virtualAccount: { balance: 0, currency: "XOF" },
   isActive: true,
   isActivated: false,
-  otpCode: otp,
-  otpExpiresAt,
+  otp: otp,
+otpExpiration: otpExpiresAt,
+
 });
 
 // ✅ Sauvegarde de l'utilisateur - Cela va automatiquement hacher le PIN grâce à `UserSchema.pre("save")`
