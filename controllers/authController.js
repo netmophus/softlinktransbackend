@@ -247,8 +247,46 @@ export const login = async (req, res) => {
 
 
 //🔹 VÉRIFICATION DE L'OTP
+// export const verifyOTP = async (req, res) => {
+//   const { phone, otp } = req.body;  // <-- Utilise otp ici
+
+//   try {
+//     const formattedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+//     const user = await User.findOne({ phone: formattedPhone });
+
+//     if (!user) return res.status(400).json({ msg: "Utilisateur introuvable." });
+
+//     // Vérifier si un OTP a été généré et n'est pas expiré
+//     if (!user.otp || !user.otpExpiration) {
+//       return res.status(400).json({ msg: "Aucun OTP généré ou OTP expiré." });
+//     }
+
+//     if (new Date() > user.otpExpiration) {
+//       return res.status(400).json({ msg: "OTP expiré." });
+//     }
+
+//     if (user.otp !== otp) {
+//       return res.status(400).json({ msg: "OTP incorrect." });
+//     }
+
+//     console.log("✅ OTP validé avec succès pour l'utilisateur :", user.name);
+
+//     // Supprimer l’OTP après validation
+//     user.otp = null;
+//     user.otpExpiration = null;
+//     await user.save();
+
+//     const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "7d" });
+//     console.log("✅ Token généré :", token);
+
+//     res.status(200).json({ token, user, msg: "Connexion réussie par OTP." });
+//   } catch (error) {
+//     console.error("❌ Erreur lors de la validation de l'OTP :", error.message);
+//     res.status(500).json({ msg: "Erreur du serveur." });
+//   }
+// };
 export const verifyOTP = async (req, res) => {
-  const { phone, otp } = req.body;  // <-- Utilise otp ici
+  const { phone, otp } = req.body;
 
   try {
     const formattedPhone = phone.startsWith('+') ? phone : `+${phone}`;
@@ -269,17 +307,23 @@ export const verifyOTP = async (req, res) => {
       return res.status(400).json({ msg: "OTP incorrect." });
     }
 
-    console.log("✅ OTP validé avec succès pour l'utilisateur :", user.name);
+    // ✅ Vérifier que seul un user peut être activé par OTP
+    if (user.role !== "user") {
+      return res.status(403).json({ msg: "Ce type de compte ne peut pas être activé par OTP." });
+    }
 
-    // Supprimer l’OTP après validation
+    // ✅ Activer le compte
+    user.isActivated = true;
     user.otp = null;
     user.otpExpiration = null;
     await user.save();
 
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "7d" });
-    console.log("✅ Token généré :", token);
+    console.log("✅ Compte activé avec succès pour :", user.name);
 
-    res.status(200).json({ token, user, msg: "Connexion réussie par OTP." });
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: "7d" });
+
+    res.status(200).json({ token, user, msg: "✅ Vérification réussie. Compte activé." });
+
   } catch (error) {
     console.error("❌ Erreur lors de la validation de l'OTP :", error.message);
     res.status(500).json({ msg: "Erreur du serveur." });
