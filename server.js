@@ -88,12 +88,23 @@ dotenv.config();
 
 const app = express();
 
-// ✅ Configuration de CORS (Mise à jour)
+// // ✅ Configuration de CORS (Mise à jour)
+// const corsOptions = {
+//   origin: "http://localhost:3000", // Remplace par l'URL de ton frontend en production
+//   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//   allowedHeaders: ["Content-Type", "Authorization"], // ✅ Ajout de `Authorization` pour les tokens
+// };
+
 const corsOptions = {
-  origin: "http://localhost:3000", // Remplace par l'URL de ton frontend en production
+  origin: [
+    "http://localhost:3000", // Pour développement local
+    "https://softlinktransfrontend-fa5db0d613b3.herokuapp.com" // Pour production Heroku
+  ],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"], // ✅ Ajout de `Authorization` pour les tokens
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true, // Si tu utilises des cookies ou tokens avec credentials
 };
+
 
 app.use(cors(corsOptions));
 
