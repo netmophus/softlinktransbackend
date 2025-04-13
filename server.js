@@ -97,8 +97,8 @@ const app = express();
 
 const corsOptions = {
   origin: [
-    "http://localhost:3000", // Pour développement local
-    "https://softlinktransfrontend-fa5db0d613b3.herokuapp.com" // Pour production Heroku
+    "http://localhost:3000", // Pour développement local    
+    "https://softlinktransfrontend-b028bd70ad96.herokuapp.com" // Pour production Heroku
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
