@@ -14,17 +14,17 @@ const InterCityTransferSchema = new mongoose.Schema({
     receiverPhone: { type: String, required: true }, // 🔹 Téléphone du bénéficiaire
     receiverCity: { type: mongoose.Schema.Types.ObjectId, ref: "City", required: true }, // 🔹 Ville de retrait
 
-    createdBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      required: true, // car toujours initié par quelqu’un
-    },
+    // createdBy: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "User",
+    //   required: true, // car toujours initié par quelqu’un
+    // },
     
-    paidBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // toujours un caissier
-      default: null, // mis à jour lors du paiement
-    },
+    // paidBy: {
+    //   type: mongoose.Schema.Types.ObjectId,
+    //   ref: "User", // toujours un caissier
+    //   default: null, // mis à jour lors du paiement
+    // },
     
     
     amount: { type: Number, required: true }, // 🔹 Montant envoyé
