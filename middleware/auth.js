@@ -88,3 +88,7 @@ export const authenticateUser = async (req, res, next) => {
     res.status(401).json({ msg: "Session invalide. Veuillez vous reconnecter." });
   }
 };
+
+export const logoutUser = (req, res) => {
+  res.status(200).json({ msg: "Déconnexion réussie." });
+};
