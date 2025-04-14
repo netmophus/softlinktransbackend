@@ -39,6 +39,14 @@
 // };
 
 
+
+
+
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
+
+const AUTH_TIMEOUT = 30 * 60 * 1000; // 30 minutes d'inactivité avant déconnexion
+
 export const authenticateUser = async (req, res, next) => {
   try {
     let token = req.headers?.authorization?.split(" ")[1];
