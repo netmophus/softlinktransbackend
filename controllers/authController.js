@@ -157,7 +157,8 @@ console.log("✅ Utilisateur enregistré avec succès :", user);
 
       // ✅ Envoyer le PIN par SMS - C'est risqué en clair, à éviter.
       await sendSMS(formattedPhone, 
-        `Bienvenue sur SOFTLINK TRANSFERT.\nVotre PIN temporaire : ${pin}\nVotre code de vérification : ${otp} (valide 5 minutes)`
+       // `Bienvenue sur SOFTLINK TRANSFERT.\nVotre PIN temporaire : ${pin}\nVotre code de vérification : ${otp} (valide 5 minutes)`
+         `Bienvenue sur SOFTLINK TRANSFERT.\nVotre code de vérification : ${otp} (valide 5 minutes)`
       );
       
       console.log("📤 SMS envoyé au :", formattedPhone);
