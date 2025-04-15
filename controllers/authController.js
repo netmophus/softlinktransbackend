@@ -518,6 +518,24 @@ export const verifyResetOtp = async (req, res) => {
 };
 
 
+
+const verifyPassword = async (req, res) => {
+  const { password } = req.body;
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ msg: "Utilisateur introuvable." });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ msg: "Mot de passe incorrect." });
+
+    res.status(200).json({ success: true, msg: "Mot de passe validé." });
+  } catch (err) {
+    console.error("Erreur vérification mot de passe :", err);
+    res.status(500).json({ msg: "Erreur serveur." });
+  }
+};
+
+
 export default {
   register,
   login,
@@ -528,5 +546,6 @@ export default {
   changePIN,
   getAuthenticatedUser,
   requestResetPassword,
-  verifyResetOtp
+  verifyResetOtp,
+  verifyPassword
 };

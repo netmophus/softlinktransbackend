@@ -274,7 +274,7 @@ senderCashRegister.transactions.push({
           totalCost,
           secretCode,
           status: "pending",
-          createdBy: req.user._id  // 🔥 Caissier connecté
+          // createdBy: req.user._id  // 🔥 Caissier connecté
       });
 
       await newTransfer.save();
@@ -283,8 +283,18 @@ senderCashRegister.transactions.push({
       const receiptPath = await generateReceiptPDF(newTransfer);
 
       // Envoi des notifications SMS
-     // await sendSMS(senderPhone, `Votre transfert interville est validé.\nMontant: ${finalAmount} XOF\nCode Secret: ${secretCode}.`);
-     // await sendSMS(receiverPhone, `Vous avez reçu un transfert interville.\nMontant: ${finalAmount} XOF\nCode Secret: ${secretCode}.`);
+      const senderMessage = `✅ Transfert interville validé.\nMontant: ${finalAmount} XOF.\n🔐 Code Secret: ${secretCode}`;
+      const senderSMSResult = await sendSMS(senderPhone, senderMessage);
+      console.log("📤 Résultat SMS expéditeur :", senderSMSResult);
+      
+      const receiverMessage = `📥 Transfert reçu: ${finalAmount} XOF.\n🔐 Code: ${secretCode}`;
+      const receiverSMSResult = await sendSMS(receiverPhone, receiverMessage);
+      console.log("📤 Résultat SMS bénéficiaire :", receiverSMSResult);
+      
+     
+
+
+
 
       // Réponse avec le chemin du reçu PDF
       res.status(201).json({
@@ -753,7 +763,7 @@ export const payTransfer = async (req, res) => {
     await transfer.save();
 
       // ✅ Envoyer une notification SMS au sender
-        const senderMessage = `✅ Retrait effectué ! ${transfer.receiverName} a retiré ${transfer.amount} XOF. Merci d'utiliser notre service.`;
+        const senderMessage = `Retrait effectué ! ${transfer.receiverName} a retiré ${transfer.amount} XOF. Merci d'utiliser notre service.`;
        await sendSMS(transfer.senderPhone, senderMessage);
 
     return res.status(200).json({ msg: "Transfert payé avec succès.", transfer });

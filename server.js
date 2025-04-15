@@ -21,7 +21,7 @@ dotenv.config();
 
 const app = express();
 
-// // ✅ Configuration de CORS (Mise à jour)
+// ✅ Configuration de CORS (Mise à jour)
 // const corsOptions = {
 //   origin: "http://localhost:3000", // Remplace par l'URL de ton frontend en production
 //   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],

@@ -161,8 +161,8 @@ export const createInterCityTransfer = async (req, res) => {
         console.log("✅ Transfert enregistré en base de données avec succès.");
   
         // ✅ Envoi des notifications SMS (optionnel)
-        // await sendSMS(senderPhone, `Votre transfert interville est validé.\nMontant: ${finalAmount} XOF\nCode Secret: ${secretCode}.`);
-        // await sendSMS(receiverPhone, `Vous avez reçu un transfert interville.\nMontant: ${finalAmount} XOF\nCode Secret: ${secretCode}.`);
+        await sendSMS(senderPhone, `Votre transfert interville est validé.\nMontant: ${finalAmount} XOF\nCode Secret: ${secretCode}.`);
+        await sendSMS(receiverPhone, `Vous avez reçu un transfert interville.\nMontant: ${finalAmount} XOF\nCode Secret: ${secretCode}.`);
         console.log("📩 SMS envoyés aux parties concernées.");
   
         // ✅ Réponse avec le nouveau solde et le code secret

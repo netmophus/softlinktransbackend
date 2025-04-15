@@ -16,6 +16,9 @@ router.post("/verify-otp", authController.verifyOTP);
 router.post('/verify-reset-otp', authController.verifyResetOtp);
 
 
+router.post("/verify-password", authenticateUser, authController.verifyPassword);
+
+
 // routes/authRoutes.js
 router.post('/request-reset-password', authController.requestResetPassword);
 

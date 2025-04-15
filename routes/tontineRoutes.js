@@ -1,7 +1,7 @@
 import express from "express";
 import { authenticateUser } from "../middleware/auth.js";
 import { authorizeRoles } from "../middleware/role.js";
-import { createTontine, enrollMember, findUserByPhone,getTontineCycles,getUserTontineDetails, getMyTontines, payTontineContribution, assignCycleBeneficiary, sendTontineNotification, getActiveTontinesCount } from "../controllers/tontineController.js";
+import { createTontine, enrollMember, findUserByPhone,getTontineCycles,getUserTontineDetails, getMyTontines, payTontineContribution, assignCycleBeneficiary, sendTontineNotification, getActiveTontinesCount,  serveBeneficiary } from "../controllers/tontineController.js";
 
 const router = express.Router();
 
@@ -43,5 +43,13 @@ router.get("/active-count", authenticateUser,  authorizeRoles("user"),  getActiv
 
 // // ✅ Récupérer les cycles et paiements d'une tontine spécifique
 router.get("/:tontineId/my-details", authenticateUser,  authorizeRoles("user"), getUserTontineDetails);
+
+
+router.post(
+  "/:tontineId/cycles/:cycleId/serve",
+  authenticateUser,
+  authorizeRoles("user"),
+  serveBeneficiary
+);
 
 export default router;

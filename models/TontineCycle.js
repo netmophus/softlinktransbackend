@@ -33,7 +33,7 @@ const TontineCycleSchema = new mongoose.Schema({
 
   // ✅ Ajout : Bénéficiaire du cycle
   beneficiary: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, 
-
+  completedAt: { type: Date }, // ✅ nouvelle ligne ici
   createdAt: { type: Date, default: Date.now }, // 📌 Date de création du cycle
 });
 
