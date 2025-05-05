@@ -10,6 +10,7 @@ import {
   addFundsToCashRegister,
   withdrawFunds,
   getCashRegisterTransactions,
+  getCashRegisterReporting,
 } from "../controllers/cashRegisterController.js";
 
 const router = express.Router();
@@ -34,6 +35,8 @@ router.put("/reopen/:id", authenticateUser, authorizeRoles("supervisor"), reopen
 
 // ✅ 4️⃣ Récupérer toutes les caisses d’un superviseur
 router.get("/", authenticateUser, authorizeRoles("supervisor"), getCashRegisters);
+
+router.get("/reporting", authenticateUser, authorizeRoles("supervisor"), getCashRegisterReporting);
 
 
 

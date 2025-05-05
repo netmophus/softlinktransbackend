@@ -15,8 +15,8 @@ import userRoutes from "./routes/userRoutes.js";
 import interUserTransferRoutes from "./routes/interUserTranferRoutes.js";
 import  identificationRoutes from "./routes/identificationRoutes.js";
 import configRoutes from "./routes/configRoutes.js";
-
-
+import commissionsRoutes from "./routes/commissionsRoutes.js";
+import feesRoutes from "./routes/feesRoutes.js";
 dotenv.config();
 
 const app = express();
@@ -46,10 +46,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ✅ Connexion MongoDB (Correction : suppression des options obsolètes)
+
+// ✅ Vérifie la valeur de la variable d'environnement
+console.log("MONGO_URI utilisé :", process.env.MONGO_URI);
+
+
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => console.log("✅ Connexion MongoDB réussie"))
   .catch((err) => console.error("❌ Erreur de connexion MongoDB :", err));
+
+  
 
 // ✅ Routes
 app.use("/auth", authRoutes);
@@ -59,7 +66,7 @@ app.use("/supervisor/cash-registers", cashRegisterRoutes);
 app.use("/cashier", cashierRoutes);
 app.use("/admin/cities", cityRoutes);
 app.use("/user", userRoutes); // 🔹 Routes spécifiques aux utilisateurs
-
+app.use("/fees", feesRoutes);
 
 // 🔹 Ajout des routes pour les transferts entre utilisateurs
 app.use("/user-transactions", userTransactionRoutes);
@@ -78,6 +85,7 @@ app.use("/api/identifications", identificationRoutes);
 
 app.use("/config", configRoutes); // /config/fees
 
+app.use("/admin/commissions", commissionsRoutes);
 
 app.get("/", (req, res) => {
   res.send("Bienvenue sur l’API NIYYA !");

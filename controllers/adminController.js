@@ -6,7 +6,6 @@ import City from "../models/City.js";
 import ActivityLog from "../models/ActivityLog.js";
 
 
-// Fonction pour générer un PIN aléatoire
 
 
 export const createSupervisor = async (req, res) => {
@@ -112,3 +111,6 @@ export const toggleSupervisorStatus = async (req, res) => {
       res.status(500).json({ msg: "Erreur du serveur." });
   }
 };
+
+
+

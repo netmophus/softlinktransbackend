@@ -1,6 +1,12 @@
 import mongoose from "mongoose";
 
 const InterCityTransferSchema = new mongoose.Schema({
+  cashRegister: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "CashRegister",
+    required: false,
+  },
+  
     senderFirstName: { type: String, required: true }, // 🔹 Prénom de l'expéditeur
     senderLastName: { type: String, required: true }, // 🔹 Nom de l'expéditeur
     senderPhone: { type: String, required: true }, // 🔹 Téléphone de l'expéditeur
@@ -13,19 +19,7 @@ const InterCityTransferSchema = new mongoose.Schema({
     receiverName: { type: String, required: true }, // 🔹 Nom du bénéficiaire
     receiverPhone: { type: String, required: true }, // 🔹 Téléphone du bénéficiaire
     receiverCity: { type: mongoose.Schema.Types.ObjectId, ref: "City", required: true }, // 🔹 Ville de retrait
-
-    // createdBy: {
-    //   type: mongoose.Schema.Types.ObjectId,
-    //   ref: "User",
-    //   required: true, // car toujours initié par quelqu’un
-    // },
-    
-    // paidBy: {
-    //   type: mongoose.Schema.Types.ObjectId,
-    //   ref: "User", // toujours un caissier
-    //   default: null, // mis à jour lors du paiement
-    // },
-    
+   
     
     amount: { type: Number, required: true }, // 🔹 Montant envoyé
     commission: { type: Number, required: true }, // 🔹 Commission prélevée sur le transfert
@@ -33,7 +27,12 @@ const InterCityTransferSchema = new mongoose.Schema({
 
     secretCode: { type: String, required: true }, // 🔹 Code de retrait
     status: { type: String, enum: ["pending", "completed", "cancelled"], default: "pending" }, // 🔹 État du transfert
-
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true, // facultatif, tu peux le mettre à false si nécessaire
+    },
+    
     createdAt: { type: Date, default: Date.now },
 });
 

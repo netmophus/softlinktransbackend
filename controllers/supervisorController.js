@@ -5,8 +5,117 @@ import ActivityLog from "../models/ActivityLog.js"; // Assurez-vous d'importer l
 import CashRegister from "../models/CashRegister.js";
 import { generateOTP } from "../services/otpService.js";
 import { sendSMS } from "../services/smsService.js";
+// controllers/dailyCashierReportController.js
+import DailyCashierReport from "../models/DailyCashierReport.js";
+import ClosingReport from "../models/ClosingReport.js";
+import CashMovement from "../models/CashMovement.js";
 
-// 🔹 Création d’un caissier
+
+// controllers/supervisorController.js
+
+export const getClosingReportDetails = async (req, res) => {
+  try {
+    const { reportId } = req.params;
+
+    // 1️⃣ Trouver le rapport de fermeture par son _id
+    const report = await ClosingReport.findById(reportId)
+      .populate("cashier", "name phone")
+      .populate("supervisor", "name phone");
+
+    if (!report) return res.status(404).json({ msg: "Rapport non trouvé" });
+
+    // 2️⃣ Trouver la caisse associée (pour le numéro, etc)
+    const cashRegister = await CashRegister.findById(report.cashRegister);
+
+    // 3️⃣ Récupérer les mouvements de cette caisse
+    const movements = await CashMovement.find({ cashRegister: report.cashRegister }).sort({ date: 1 });
+
+    res.json({
+      ...report.toObject(),
+      registerNumber: cashRegister?.registerNumber,
+      openedAt: cashRegister?.openedAt,
+      closedAt: cashRegister?.closedAt,
+      movements,
+    });
+  } catch (err) {
+    res.status(500).json({ msg: "Erreur lors de la récupération du rapport." });
+  }
+};
+
+
+
+
+
+// export const getClosingReports = async (req, res) => {
+//   try {
+//     const supervisorId = req.user._id;
+
+//     // Tu peux filtrer par superviseur pour ne voir que les rapports de l'utilisateur connecté
+//     const reports = await ClosingReport.find({ supervisor: supervisorId })
+//       .populate("cashier", "name phone")
+//       .populate("cashRegister", "registerNumber openedAt")
+//       .sort({ closedAt: -1 });
+
+//     const formatted = reports.map(rep => ({
+//       id: rep.cashRegister?._id?.toString() ?? rep._id.toString(),
+//       registerNumber: rep.registerNumber ?? rep.cashRegister?.registerNumber ?? "-",
+//       cashier: rep.cashier,
+//       openedAt: rep.openedAt ?? rep.cashRegister?.openedAt ?? "-",
+//       closedAt: rep.closedAt,
+//       openingAmount: rep.openingAmount,
+//       closingAmount: rep.actualClosingAmount ?? rep.closingAmount,
+//       totalDeposits: rep.totalDeposits,
+//       totalWithdrawals: rep.totalWithdrawals,
+//       theoreticalBalance: rep.expectedClosingAmount,
+//       gap: rep.discrepancy,
+//       closingNote: rep.note ?? "-",
+//     }));
+
+//     res.status(200).json(formatted);
+//   } catch (error) {
+//     console.error("❌ Erreur récupération rapports de fermeture :", error);
+//     res.status(500).json({ msg: "Erreur du serveur." });
+//   }
+// };
+
+
+
+// controllers/supervisorController.js
+
+export const getClosingReports = async (req, res) => {
+  try {
+    const supervisorId = req.user._id;
+
+    // Rapports liés au superviseur connecté
+    const reports = await ClosingReport.find({ supervisor: supervisorId })
+      .populate("cashier", "name phone")
+      .populate("cashRegister", "registerNumber openedAt")
+      .sort({ closedAt: -1 });
+
+    const formatted = reports.map(rep => ({
+      id: rep._id.toString(), // 👈 C'EST ICI LA CLE!
+      registerNumber: rep.registerNumber ?? rep.cashRegister?.registerNumber ?? "-",
+      cashier: rep.cashier,
+      openedAt: rep.openedAt ?? rep.cashRegister?.openedAt ?? "-",
+      closedAt: rep.closedAt,
+      openingAmount: rep.openingAmount,
+      closingAmount: rep.actualClosingAmount ?? rep.closingAmount,
+      totalDeposits: rep.totalDeposits,
+      totalWithdrawals: rep.totalWithdrawals,
+      theoreticalBalance: rep.expectedClosingAmount,
+      gap: rep.discrepancy,
+      closingNote: rep.note ?? "-",
+    }));
+
+    res.status(200).json(formatted);
+  } catch (error) {
+    console.error("❌ Erreur récupération rapports de fermeture :", error);
+    res.status(500).json({ msg: "Erreur du serveur." });
+  }
+};
+
+
+
 
 export const createCashier = async (req, res) => {
     try {
@@ -156,3 +265,41 @@ export const getSupervisorInfo = async (req, res) => {
 };
 
   
+
+
+
+export const getDailyReports = async (req, res) => {
+    try {
+      const { start, end, date } = req.query;
+  
+      const query = {};
+  
+      if (date) {
+        // Filtrer sur la date exacte (sans l'heure)
+        const startDate = new Date(date);
+        startDate.setHours(0, 0, 0, 0);
+        const endDate = new Date(date);
+        endDate.setHours(23, 59, 59, 999);
+        query.date = { $gte: startDate, $lte: endDate };
+      } else if (start || end) {
+        query.date = {};
+        if (start) query.date.$gte = new Date(start);
+        if (end) query.date.$lte = new Date(end);
+      }
+  
+      const reports = await DailyCashierReport.find(query)
+        .populate("cashier", "name phone")
+        .populate("cashRegister", "registerNumber")
+        .sort({ date: -1 });
+  
+      res.status(200).json(reports);
+    } catch (error) {
+      console.error("❌ Erreur lors de la récupération des rapports :", error);
+      res.status(500).json({ msg: "Erreur du serveur." });
+    }
+  };
+
+
+
+
+

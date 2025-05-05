@@ -1,7 +1,7 @@
 import express from "express";
 import { authenticateUser } from "../middleware/auth.js";
 import { authorizeRoles } from "../middleware/role.js";
-import {getPendingTransfers,cancelTransfer, payTransfer, getTotalInterCityTransfers, getInterCityTransfersHistory,  calculateFeesController,checkSenderController,  depositForUser, withdrawForUser, getCashierTransactions, getCashRegisterDetails,getDepositsHistory, getWithdrawalsHistory, getTotalDepositsWithdrawals, createInterCityTransfer, findUserByPhone } from "../controllers/cashierController.js";
+import {getPendingTransfers,cancelTransfer, payTransfer, getTotalInterCityTransfers, getInterCityTransfersHistory,  calculateFeesController,checkSenderController,  depositForUser, withdrawForUser, getCashierTransactions, getCashRegisterDetails,getDepositsHistory, getWithdrawalsHistory, getTotalDepositsWithdrawals, createInterCityTransfer, findUserByPhone, modifyInterCityTransfer } from "../controllers/cashierController.js";
 
 const router = express.Router();
 
@@ -39,6 +39,9 @@ router.get("/history/withdrawals", authenticateUser, authorizeRoles("cashier"), 
 
 router.post("/inter-city-transfer", authenticateUser, authorizeRoles("user", "cashier"), createInterCityTransfer);
 
+// ✅ Modifier un transfert inter-ville (ville ou bénéficiaire) si encore pending
+router.put("/inter-city-transfer/:id/modify", authenticateUser, authorizeRoles("cashier"), modifyInterCityTransfer);
+
 router.get("/total-intercity-transfers", authenticateUser,  authorizeRoles("cashier"), getTotalInterCityTransfers);
 
 router.get("/history/intercity", authenticateUser, authorizeRoles("cashier"), getInterCityTransfersHistory);
@@ -56,7 +59,7 @@ router.get("/pending-transfers", authenticateUser, authorizeRoles("cashier"), ge
 router.post("/pay-transfer/:id", authenticateUser, authorizeRoles("cashier"), payTransfer);
 
 // ✅ Annuler un transfert et changer son statut en "cancelled"
-router.put("/cancel-transfer/:id", authenticateUser, authorizeRoles("cashier"), cancelTransfer);
+router.put("/cancel-transfer/:id", authenticateUser, authorizeRoles("cashier", "user"), cancelTransfer);
 
 
 

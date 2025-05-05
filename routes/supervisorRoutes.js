@@ -1,7 +1,7 @@
 import express from "express";
 import { authenticateUser } from "../middleware/auth.js";
 import { authorizeRoles } from "../middleware/role.js";
-import { createCashier, getCashiers, getSupervisorInfo, toggleCashierStatus } from "../controllers/supervisorController.js";
+import { createCashier, getCashiers, getSupervisorInfo, getClosingReports,toggleCashierStatus, getDailyReports, getClosingReportDetails } from "../controllers/supervisorController.js";
 
 const router = express.Router();
 
@@ -19,5 +19,22 @@ router.put("/toggle-cashier/:id", authenticateUser, authorizeRoles("supervisor")
 
 // Route pour récupérer les infos du superviseur connecté
 router.get("/me", authenticateUser, authorizeRoles("supervisor"), getSupervisorInfo);
+
+
+router.get("/daily-reports", authenticateUser, authorizeRoles("supervisor"), getDailyReports);
+
+router.get(
+    "/reports/closing/:reportId",
+    authenticateUser,
+    authorizeRoles("supervisor"),
+    getClosingReportDetails // (voir réponse précédente)
+  );
+// 🔥 Seuls les superviseurs peuvent accéder à ce rapport
+router.get("/reports/closing", authenticateUser, authorizeRoles("supervisor"), getClosingReports);
+
+
+
+
+  
 
 export default router;

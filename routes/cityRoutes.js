@@ -6,7 +6,7 @@ import { createCity, getCities } from "../controllers/cityController.js";
 const router = express.Router();
 
 // ✅ Créer une nouvelle ville (ADMIN SEULEMENT)
-router.post("/", authenticateUser, authorizeRoles("admin"), createCity);
+router.post("/", authenticateUser, authorizeRoles("admin", "cashier"), createCity);
 
 // ✅ Récupérer la liste des villes
 router.get("/", authenticateUser, getCities);

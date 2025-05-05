@@ -1,7 +1,31 @@
 import express from "express";
 import { authenticateUser } from "../middleware/auth.js";
 import { authorizeRoles } from "../middleware/role.js";
-import { createTontine, enrollMember, findUserByPhone,getTontineCycles,getUserTontineDetails, getMyTontines, payTontineContribution, assignCycleBeneficiary, sendTontineNotification, getActiveTontinesCount,  serveBeneficiary } from "../controllers/tontineController.js";
+import { createTontine, 
+  enrollMember, 
+  findUserByPhone,
+  getTontineCycles,
+  getUserTontineDetails, 
+  getMyTontines, 
+  payTontineContribution, 
+  assignCycleBeneficiary, 
+  sendTontineNotification, 
+  getActiveTontinesCount,  
+  serveBeneficiary,
+  getActiveTontinesReport,
+  getAllTontineMembersReport,
+  getTotalCollectedReport,
+  getTontinesCycleProgressReport,
+  getBeneficiariesHistoryReport,
+  getPendingCyclesReport,
+  updateTontineByInitiator,
+  getTontineById,
+  getTontineWithMembers,
+
+  removeTontineMember,
+
+
+} from "../controllers/tontineController.js";
 
 const router = express.Router();
 
@@ -51,5 +75,63 @@ router.post(
   authorizeRoles("user"),
   serveBeneficiary
 );
+
+
+router.get(
+  "/admin/tontines/active",
+  authenticateUser,
+  authorizeRoles("admin"),
+  getActiveTontinesReport
+);
+
+
+router.get(
+  "/admin/tontines/members",
+  authenticateUser,
+  authorizeRoles("admin"),
+  getAllTontineMembersReport
+);
+
+router.get(
+  "/admin/tontines/collected",
+  authenticateUser,
+  authorizeRoles("admin"),
+  getTotalCollectedReport
+);
+
+router.get(
+  "/admin/tontines/progress",
+  authenticateUser,
+  authorizeRoles("admin"),
+  getTontinesCycleProgressReport
+);
+
+router.get(
+  "/admin/tontines/beneficiaries",
+  authenticateUser,
+  authorizeRoles("admin"),
+  getBeneficiariesHistoryReport
+);
+
+
+router.get(
+  "/admin/tontines/pending-cycles",
+  authenticateUser,
+  authorizeRoles("admin"),
+  getPendingCyclesReport
+);
+
+router.put(
+  "/:tontineId/update",
+  authenticateUser,
+  authorizeRoles("user"),
+  updateTontineByInitiator
+);
+
+
+router.get("/:tontineId", authenticateUser, authorizeRoles("user"), getTontineById);
+router.get("/:tontineId/edit-info", authenticateUser, authorizeRoles("user"), getTontineWithMembers);
+
+router.delete("/:tontineId/members/:memberId", authenticateUser, authorizeRoles("user"), removeTontineMember);
 
 export default router;

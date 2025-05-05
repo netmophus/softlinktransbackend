@@ -6,12 +6,15 @@ import {
   getInterUserTransferById,
   getUserBalance,
   checkUserByPhone,
+
 } from "../controllers/interUserTransferController.js";
 
 const router = express.Router();
 
 // Création d'un transfert entre utilisateurs
 router.post("/transfer", authenticateUser, createInterUserTransfer);
+
+
 
 // Récupérer l'historique des transferts de l'utilisateur connecté (envoi et réception)
 router.get("/transfer/history", authenticateUser, getInterUserTransfers);
