@@ -473,7 +473,6 @@ import db from "../firebase/firebaseAdmin.js";
 
 import admin from "../firebase/firebaseAdmin.js";
 
-const db = admin.firestore();
 const Timestamp = admin.firestore.Timestamp;
 
 export const startConversationWithUser = async (req, res) => {
