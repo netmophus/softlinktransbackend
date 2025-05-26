@@ -2,83 +2,70 @@ import Identification from "../models/Identification.js";
 import User from "../models/User.js";
 
 // ➕ Créer un dossier d’identification
-// export const createIdentification = async (req, res) => {
-//   try {
-//     const { fullName, birthDate, nationality, documentType, documentNumber } = req.body;
 
-//     // Vérifier si une identification existe déjà pour cet utilisateur
-//     const existing = await Identification.findOne({ user: req.user.id });
-//     if (existing) {
-//       return res.status(400).json({ msg: "Une demande existe déjà." });
-//     }
-
-//     const identification = new Identification({
-//       user: req.user.id,
-//       fullName,
-//       birthDate,
-//       nationality,
-//       documentType,
-//       documentNumber,
-//       status: "en attente",
-//     });
-
-//     await identification.save();
-//     res.status(201).json(identification);
-//   } catch (error) {
-//     console.error("Erreur création identification :", error);
-//     res.status(500).json({ msg: "Erreur serveur" });
-//   }
-// };
-
+import { uploadToCloudinary } from "../utils/uploadToCloudinary.js";
 
 export const createIdentification = async (req, res) => {
-    try {
-      const {
-        fullName,
-        dateOfBirth,
-        gender,
-        country,
-        city,
-        address,
-        profession,
-        idType,
-        idNumber,
-        idFrontImage,
-        idBackImage,
-        selfieWithId,
-      } = req.body;
-  
-      // Vérifie si une demande existe déjà pour l’utilisateur
-      const existing = await Identification.findOne({ user: req.user.id });
-      if (existing) {
-        return res.status(400).json({ msg: "Une demande existe déjà pour cet utilisateur." });
-      }
-  
-      const identification = new Identification({
-        user: req.user.id,
-        fullName,
-        dateOfBirth,
-        gender,
-        country,
-        city,
-        address,
-        profession,
-        idType,
-        idNumber,
-        idFrontImage,
-        idBackImage,
-        selfieWithId,
-        status: "en attente",
-      });
-  
-      await identification.save();
-      res.status(201).json(identification);
-    } catch (error) {
-      console.error("❌ Erreur création identification :", error);
-      res.status(500).json({ msg: "Erreur serveur" });
+  try {
+    const {
+      fullName,
+      dateOfBirth,
+      gender,
+      country,
+      city,
+      address,
+      profession,
+      idType,
+      idNumber,
+    } = req.body;
+
+    const existing = await Identification.findOne({ user: req.user.id });
+    if (existing) {
+      return res.status(400).json({ msg: "Une demande existe déjà pour cet utilisateur." });
     }
-  };
-  
+
+    // Upload des images si elles existent
+    const idFrontFile = req.files?.idFrontImage?.[0];
+    const idBackFile = req.files?.idBackImage?.[0];
+    const selfieFile = req.files?.selfieWithId?.[0];
+
+    const idFrontImage = idFrontFile
+      ? await uploadToCloudinary(idFrontFile.buffer, `id_front_${req.user.id}`)
+      : null;
+
+    const idBackImage = idBackFile
+      ? await uploadToCloudinary(idBackFile.buffer, `id_back_${req.user.id}`)
+      : null;
+
+    const selfieWithId = selfieFile
+      ? await uploadToCloudinary(selfieFile.buffer, `selfie_${req.user.id}`)
+      : null;
+
+    const identification = new Identification({
+      user: req.user.id,
+      fullName,
+      dateOfBirth,
+      gender,
+      country,
+      city,
+      address,
+      profession,
+      idType,
+      idNumber,
+      idFrontImage,
+      idBackImage,
+      selfieWithId,
+      status: "en attente",
+    });
+
+    await identification.save();
+    res.status(201).json(identification);
+  } catch (error) {
+    console.error("❌ Erreur création identification :", error);
+    res.status(500).json({ msg: "Erreur serveur" });
+  }
+};
+
 
 // 🔍 Voir son propre dossier d’identification
 export const getMyIdentification = async (req, res) => {

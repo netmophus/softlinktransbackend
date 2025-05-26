@@ -24,6 +24,8 @@ import { createTontine,
 
   removeTontineMember,
 
+   replaceTontineMember,
+
 
 } from "../controllers/tontineController.js";
 
@@ -134,4 +136,11 @@ router.get("/:tontineId/edit-info", authenticateUser, authorizeRoles("user"), ge
 
 router.delete("/:tontineId/members/:memberId", authenticateUser, authorizeRoles("user"), removeTontineMember);
 
+
+router.post(
+  "/:tontineId/replace-member",
+  authenticateUser,
+  authorizeRoles("user"),
+  replaceTontineMember
+);
 export default router;

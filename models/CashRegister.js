@@ -56,6 +56,10 @@ const CashRegisterSchema = new mongoose.Schema({
   isActive: { type: Boolean, default: true },
   openedAt: { type: Date, default: Date.now },
   closedAt: { type: Date },
+
+  
+  // 🔹 Ajout pour suivre les commissions d'envoi perçues
+  totalCommission: { type: Number, default: 0 },
 });
 
 export default mongoose.model("CashRegister", CashRegisterSchema);

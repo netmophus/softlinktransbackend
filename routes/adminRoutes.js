@@ -1,7 +1,15 @@
 import express from "express";
 import { authenticateUser } from "../middleware/auth.js";
 import { authorizeRoles } from "../middleware/role.js";
-import { createSupervisor,  getSupervisors, toggleSupervisorStatus} from "../controllers/adminController.js";
+import { createSupervisor,  getSupervisors, toggleSupervisorStatus,   createAgent,
+        getAllAgents,
+          getInternalSettlements,           // ✅ ajouté ici
+  settleInternalSettlement ,         // ✅ ajouté ici
+getCompensationSummary,
+startConversationWithUser,
+
+
+} from "../controllers/adminController.js";
 import { getDepositsGroupedByCity, 
     getWithdrawalsGroupedByCity , 
     getSummaryTransactionsByCity, 
@@ -14,7 +22,12 @@ import { getDepositsGroupedByCity,
         getCommissionsAndTaxesInteruser,
         getCommissionsAndTaxesTontine,
     
-        getAllInterCityTransfers
+        getAllInterCityTransfers,
+        
+
+       
+      
+
 } from "../controllers/reportingController.js";
 
 
@@ -72,6 +85,35 @@ router.get("/reports/open-cash-registers", authenticateUser, authorizeRoles("adm
 router.get("/reports/intercity-all", authenticateUser, authorizeRoles("admin"), getAllInterCityTransfers);
 
 
+// ✅ Créer un agent (admin uniquement)
+router.post("/agents", authenticateUser, authorizeRoles("admin"), createAgent);
+
+// ✅ Obtenir tous les agents
+router.get("/agents", authenticateUser, authorizeRoles("admin"), getAllAgents);
+
+
+router.post("/start-conversation", authenticateUser, authorizeRoles("agent"), startConversationWithUser);
+
+router.get(
+  "/internal-settlements",
+  authenticateUser,
+  authorizeRoles("admin"),
+  getInternalSettlements
+);
+
+router.put(
+  "/internal-settlements/:id/settle",
+  authenticateUser,
+  authorizeRoles("admin"),
+  settleInternalSettlement
+);
+
+router.get(
+  "/reports/compensations",
+  authenticateUser,
+  authorizeRoles("admin"),
+  getCompensationSummary
+);
 
 
 export default router;

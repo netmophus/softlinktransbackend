@@ -34,6 +34,36 @@ const InterCityTransferSchema = new mongoose.Schema({
     },
     
     createdAt: { type: Date, default: Date.now },
+
+//ce qu'on  a ajouté 
+
+
+receiverCashRegister: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "CashRegister",
+  required: false, // 🔹 Renseigné uniquement au moment du retrait, pour indiquer la caisse qui a réellement payé
+},
+
+deliveredAt: { 
+  type: Date 
+  // 🔹 Date et heure exactes à laquelle le bénéficiaire a retiré l’argent
+},
+
+isMobileTransfer: { 
+  type: Boolean, 
+  default: false 
+  // 🔹 Indique si le transfert a été initié depuis l’application mobile par un utilisateur inscrit
+  // true = transfert mobile, false = transfert effectué physiquement à une caisse
+},
+
+refunded: { 
+  type: Boolean, 
+  default: false 
+  // 🔹 Utilisé pour signaler qu’un transfert a été annulé et remboursé à l’expéditeur
+  // Utile pour la gestion des litiges et annulations
+},
+
+
 });
 
 export default mongoose.model("InterCityTransfer", InterCityTransferSchema);

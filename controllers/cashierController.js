@@ -11,6 +11,8 @@ import fs from "fs";
 import PDFDocument from "pdfkit";
 import CashMovement from "../models/CashMovement.js";
 import mongoose from "mongoose";
+import CommissionHistory from "../models/CommissionHistory.js";
+import InternalSettlement from "../models/InternalSettlement.js";
 
 
 // ✅ Vérifier si un numéro de téléphone existe dans la base et retourner le nom du sender
@@ -138,6 +140,125 @@ const generateReceiptPDF = (transfer) => {
 
 
 
+// export const createInterCityTransfer = async (req, res) => {
+//   try {
+//     console.log("🔹 Début du transfert interville...");
+
+//     const {
+//       senderFirstName,
+//       senderLastName,
+//       senderPhone,
+//       senderCity,
+//       receiverName,
+//       receiverPhone,
+//       receiverCity,
+//       amount,
+//       deductFeesFromAmount
+//     } = req.body;
+
+//     if (
+//       !senderFirstName || !senderLastName || !senderPhone || !senderCity ||
+//       !receiverName || !receiverPhone || !receiverCity || !amount
+//     ) {
+//       return res.status(400).json({ msg: "Tous les champs sont requis." });
+//     }
+
+//     const numericAmount = parseFloat(amount);
+//     if (isNaN(numericAmount) || numericAmount <= 0) {
+//       return res.status(400).json({ msg: "Montant invalide." });
+//     }
+
+//     const senderCityExists = await City.findById(senderCity);
+//     const receiverCityExists = await City.findById(receiverCity);
+//     if (!senderCityExists || !receiverCityExists) {
+//       return res.status(400).json({ msg: "Ville d'envoi ou de retrait invalide." });
+//     }
+
+//     // Calcul des frais
+//     const { commission, tax } = calculateFees(numericAmount);
+//     let finalAmount = numericAmount;
+//     let totalCost = numericAmount + commission + tax;
+//     if (deductFeesFromAmount) {
+//       finalAmount = numericAmount - commission - tax;
+//       totalCost = numericAmount;
+//     }
+//     if (finalAmount <= 0) {
+//       return res.status(400).json({ msg: "Montant final invalide après déduction des frais." });
+//     }
+
+//     // Trouver la caisse du caissier connecté
+//     const senderCashRegister = await CashRegister.findOne({
+//       cashier: req.user._id,
+//       status: "open"
+//     }).populate('supervisor');
+
+//     if (!senderCashRegister || senderCashRegister.supervisor.city.toString() !== senderCity) {
+//       return res.status(400).json({ msg: "Caisse d'envoi introuvable ou incohérente." });
+//     }
+
+//     // Vérifier que la caisse a suffisamment de fonds pour encaisser
+//     senderCashRegister.currentBalance += totalCost; // Dépôt du client
+//     await senderCashRegister.save();
+
+//     // 🧾 Enregistrer le dépôt dans CashMovement
+//     await CashMovement.create({
+//       cashRegister: senderCashRegister._id,
+//       type: "deposit",
+//       amount: totalCost,
+//       performedBy: req.user._id,
+//       note: `Dépôt client pour transfert interville vers ${receiverCityExists.name}`,
+//       clientFirstName: senderFirstName,
+//       clientPhone: senderPhone,
+//       operationType: "guichet",
+//       date: new Date(),
+//     });
+
+//     // Génération du code secret
+//     const secretCode = generateSecretCode();
+
+//     // 🔥 Enregistrer le transfert en base
+//     const newTransfer = new InterCityTransfer({
+//       senderFirstName,
+//       senderLastName,
+//       senderPhone,
+//       senderCity,
+//       receiverName,
+//       receiverPhone,
+//       receiverCity,
+//       amount: finalAmount,
+//       commission,
+//       tax,
+//       totalCost,
+//       secretCode,
+//       status: "pending",
+//       createdBy: req.user._id,
+//       cashRegister: senderCashRegister._id // ✅ Enregistrement de la caisse liée
+//     });
+//     await newTransfer.save();
+
+//     console.log("✅ Transfert enregistré avec succès.");
+
+//     // 🔔 Envoyer SMS
+//     await sendSMS(senderPhone, `✅ Transfert interville validé.\nMontant: ${finalAmount} XOF.\n🔐 Code Secret: ${secretCode}`);
+//     await sendSMS(receiverPhone, `📥 Vous avez reçu un transfert interville de ${finalAmount} XOF.\n🔐 Code: ${secretCode}`);
+
+//     res.status(201).json({
+//       msg: "Transfert effectué avec succès.",
+//       secretCode,
+//       totalCost,
+//     });
+
+//   } catch (error) {
+//     console.error("❌ Erreur transfert interville :", error);
+//     res.status(500).json({ msg: "Erreur serveur." });
+//   }
+// };
+
+
+
+
+
+
 export const createInterCityTransfer = async (req, res) => {
   try {
     console.log("🔹 Début du transfert interville...");
@@ -154,6 +275,7 @@ export const createInterCityTransfer = async (req, res) => {
       deductFeesFromAmount
     } = req.body;
 
+    // 🔒 Validation des champs
     if (
       !senderFirstName || !senderLastName || !senderPhone || !senderCity ||
       !receiverName || !receiverPhone || !receiverCity || !amount
@@ -172,19 +294,21 @@ export const createInterCityTransfer = async (req, res) => {
       return res.status(400).json({ msg: "Ville d'envoi ou de retrait invalide." });
     }
 
-    // Calcul des frais
+    // 📌 Calcul des frais
     const { commission, tax } = calculateFees(numericAmount);
     let finalAmount = numericAmount;
     let totalCost = numericAmount + commission + tax;
+
     if (deductFeesFromAmount) {
       finalAmount = numericAmount - commission - tax;
       totalCost = numericAmount;
     }
+
     if (finalAmount <= 0) {
       return res.status(400).json({ msg: "Montant final invalide après déduction des frais." });
     }
 
-    // Trouver la caisse du caissier connecté
+    // 🔍 Trouver la caisse du caissier connecté
     const senderCashRegister = await CashRegister.findOne({
       cashier: req.user._id,
       status: "open"
@@ -194,11 +318,12 @@ export const createInterCityTransfer = async (req, res) => {
       return res.status(400).json({ msg: "Caisse d'envoi introuvable ou incohérente." });
     }
 
-    // Vérifier que la caisse a suffisamment de fonds pour encaisser
-    senderCashRegister.currentBalance += totalCost; // Dépôt du client
+    // 💰 Mise à jour du solde et de la commission
+    senderCashRegister.currentBalance += totalCost;
+    senderCashRegister.totalCommission += commission;
     await senderCashRegister.save();
 
-    // 🧾 Enregistrer le dépôt dans CashMovement
+    // 🧾 Mouvement de caisse
     await CashMovement.create({
       cashRegister: senderCashRegister._id,
       type: "deposit",
@@ -207,15 +332,15 @@ export const createInterCityTransfer = async (req, res) => {
       note: `Dépôt client pour transfert interville vers ${receiverCityExists.name}`,
       clientFirstName: senderFirstName,
       clientPhone: senderPhone,
-      operationType: "guichet",
+      operationType: "intercity_send",
       date: new Date(),
     });
 
-    // Génération du code secret
+    // 🔐 Générer le code secret
     const secretCode = generateSecretCode();
 
-    // 🔥 Enregistrer le transfert en base
-    const newTransfer = new InterCityTransfer({
+    // 💾 Créer le transfert
+    const newTransfer = await InterCityTransfer.create({
       senderFirstName,
       senderLastName,
       senderPhone,
@@ -229,30 +354,172 @@ export const createInterCityTransfer = async (req, res) => {
       totalCost,
       secretCode,
       status: "pending",
+      isMobileTransfer: false,
       createdBy: req.user._id,
-      cashRegister: senderCashRegister._id // ✅ Enregistrement de la caisse liée
+      cashRegister: senderCashRegister._id
     });
-    await newTransfer.save();
 
-    console.log("✅ Transfert enregistré avec succès.");
+    // 📒 Historique des commissions
+    await CommissionHistory.create({
+      transactionType: "intercity",
+      referenceId: newTransfer._id,
+      referenceModel: "InterCityTransfer",
+      user: req.user._id,
+      city: senderCity,
+      amount: numericAmount,
+      commission,
+      tax,
+      description: "Commission générée lors d'un transfert interville en caisse",
+      date: new Date()
+    });
 
-    // 🔔 Envoyer SMS
+    // 📤 SMS aux deux parties
     await sendSMS(senderPhone, `✅ Transfert interville validé.\nMontant: ${finalAmount} XOF.\n🔐 Code Secret: ${secretCode}`);
     await sendSMS(receiverPhone, `📥 Vous avez reçu un transfert interville de ${finalAmount} XOF.\n🔐 Code: ${secretCode}`);
 
-    res.status(201).json({
+    return res.status(201).json({
       msg: "Transfert effectué avec succès.",
       secretCode,
-      totalCost,
+      totalCost
     });
 
   } catch (error) {
     console.error("❌ Erreur transfert interville :", error);
-    res.status(500).json({ msg: "Erreur serveur." });
+    return res.status(500).json({ msg: "Erreur lors de la création du transfert." });
   }
 };
 
 
+
+// export const createInterCityTransfer = async (req, res) => {
+//   try {
+//     console.log("🔹 Début du transfert interville...");
+
+//     const {
+//       senderFirstName,
+//       senderLastName,
+//       senderPhone,
+//       senderCity,
+//       receiverName,
+//       receiverPhone,
+//       receiverCity,
+//       amount,
+//       deductFeesFromAmount
+//     } = req.body;
+
+//     if (
+//       !senderFirstName || !senderLastName || !senderPhone || !senderCity ||
+//       !receiverName || !receiverPhone || !receiverCity || !amount
+//     ) {
+//       return res.status(400).json({ msg: "Tous les champs sont requis." });
+//     }
+
+//     const numericAmount = parseFloat(amount);
+//     if (isNaN(numericAmount) || numericAmount <= 0) {
+//       return res.status(400).json({ msg: "Montant invalide." });
+//     }
+
+//     const senderCityExists = await City.findById(senderCity);
+//     const receiverCityExists = await City.findById(receiverCity);
+//     if (!senderCityExists || !receiverCityExists) {
+//       return res.status(400).json({ msg: "Ville d'envoi ou de retrait invalide." });
+//     }
+
+//     // 📌 Calcul des frais
+//     const { commission, tax } = calculateFees(numericAmount);
+//     let finalAmount = numericAmount;
+//     let totalCost = numericAmount + commission + tax;
+//     if (deductFeesFromAmount) {
+//       finalAmount = numericAmount - commission - tax;
+//       totalCost = numericAmount;
+//     }
+//     if (finalAmount <= 0) {
+//       return res.status(400).json({ msg: "Montant final invalide après déduction des frais." });
+//     }
+
+//     // 📦 Récupération de la caisse active du caissier connecté
+//     const senderCashRegister = await CashRegister.findOne({
+//       cashier: req.user._id,
+//       status: "open"
+//     }).populate('supervisor');
+
+//     if (!senderCashRegister || senderCashRegister.supervisor.city.toString() !== senderCity) {
+//       return res.status(400).json({ msg: "Caisse d'envoi introuvable ou incohérente." });
+//     }
+
+//     // 💰 Mise à jour du solde de la caisse (entrée de fonds)
+//     senderCashRegister.currentBalance += totalCost;
+//     senderCashRegister.totalCommission += commission; // ✅ ajout de la commission
+//     await senderCashRegister.save();
+
+//     // 🧾 Enregistrer le mouvement de caisse
+//     await CashMovement.create({
+//       cashRegister: senderCashRegister._id,
+//       type: "deposit",
+//       amount: totalCost,
+//       performedBy: req.user._id,
+//       note: `Dépôt client pour transfert interville vers ${receiverCityExists.name}`,
+//       clientFirstName: senderFirstName,
+//       clientPhone: senderPhone,
+//       operationType: "intercity_send", // ✅ plus précis
+//       reference: null, // sera lié après création si tu veux
+//       date: new Date(),
+//     });
+
+//     // 🔐 Générer le code secret
+//     const secretCode = generateSecretCode();
+
+//     // 💾 Enregistrer le transfert
+//     const newTransfer = new InterCityTransfer({
+//       senderFirstName,
+//       senderLastName,
+//       senderPhone,
+//       senderCity,
+//       receiverName,
+//       receiverPhone,
+//       receiverCity,
+//       amount: finalAmount,
+//       commission,
+//       tax,
+//       totalCost,
+//       secretCode,
+//       status: "pending",
+//       isMobileTransfer: false, // ✅ précisé explicitement
+//       createdBy: req.user._id,
+//       cashRegister: senderCashRegister._id
+//     });
+//     await newTransfer.save();
+
+//     // 🧾 Historique de commission (important pour traçabilité)
+//     await CommissionHistory.create({
+//       transactionType: "intercity",
+//       referenceId: newTransfer._id,
+//       referenceModel: "InterCityTransfer",
+//       user: req.user._id,
+//       city: senderCity,
+//       amount: numericAmount,
+//       commission,
+//       tax,
+//       description: `Commission générée lors d'un transfert interville en caisse`,
+//       date: new Date()
+//     });
+
+//     // 📤 SMS aux deux parties
+//     await sendSMS(senderPhone, `✅ Transfert interville validé.\nMontant: ${finalAmount} XOF.\n🔐 Code Secret: ${secretCode}`);
+//     await sendSMS(receiverPhone, `📥 Vous avez reçu un transfert interville de ${finalAmount} XOF.\n🔐 Code: ${secretCode}`);
+
+//     // ✅ Réponse
+//     res.status(201).json({
+//       msg: "Transfert effectué avec succès.",
+//       secretCode,
+//       totalCost,
+//     });
+
+//   } catch (error) {
+//     console.error("❌ Erreur transfert interville :", error);
+//     res.status(500).json({ msg: "Erreur serveur." });
+//   }
+// };
 
 
 
@@ -774,9 +1041,11 @@ const transfer = await InterCityTransfer.findById(transferId)
     if (!transfer) {
       return res.status(404).json({ msg: "Transfert non trouvé." });
     }
-    if (transfer.status !== "pending") {
-      return res.status(400).json({ msg: "Transfert déjà traité ou annulé." });
-    }
+  if (transfer.status !== "pending") {
+  console.warn(`⚠️ Tentative de retrait refusée pour un transfert déjà traité : ${transfer._id}`);
+  return res.status(400).json({ msg: "Transfert déjà traité ou annulé." });
+}
+
 
     // Vérifier code secret si besoin
     if (secretCode && transfer.secretCode !== secretCode) {
@@ -811,7 +1080,8 @@ const transfer = await InterCityTransfer.findById(transferId)
       date: new Date(),
       note: `Paiement du transfert interville (code: ${transfer.secretCode}) — Provenance: ${transfer.senderCity?.name || "Ville inconnue"}`,
       clientFirstName: transfer.receiverName,
-      clientPhone: transfer.receiverPhone
+      clientPhone: transfer.receiverPhone,
+       operationType: "intercity_receive", // ✅ plus spécifique
     });
 
     // Marquer le transfert comme payé
@@ -819,7 +1089,32 @@ const transfer = await InterCityTransfer.findById(transferId)
     transfer.completedAt = new Date();
 
     await receiverCashRegister.save();
+
+    transfer.receiverCashRegister = receiverCashRegister._id;
+    transfer.deliveredAt = new Date();
+
     await transfer.save();
+
+    // await InternalSettlement.create({
+    //   interCityTransfer: transfer._id,
+    //   fromCashRegister: transfer.cashRegister, // la caisse d'envoi
+    //   toCashRegister: receiverCashRegister._id, // la caisse qui a payé
+    //   amount: transfer.amount,
+    //   status: "pending",
+    // });
+
+
+    if (!transfer.isMobileTransfer && transfer.cashRegister) {
+  await InternalSettlement.create({
+    interCityTransfer: transfer._id,
+    fromCashRegister: transfer.cashRegister,
+    toCashRegister: receiverCashRegister._id,
+    amount: transfer.amount,
+    status: "pending",
+  });
+}
+
+
 
     // ✅ Notification SMS au sender
     const senderMessage = `Retrait effectué ! ${transfer.receiverName} a retiré ${transfer.amount} XOF. Merci d'utiliser notre service.`;
@@ -1018,34 +1313,6 @@ export const getTotalInterCityTransfers = async (req, res) => {
 };
 
 
-
-// export const getInterCityTransfersHistory = async (req, res) => {
-//   try {
-//     // DEBUG : afficher la ville du caissier connecté
-//     console.log("👀 [DEBUG] Ville du caissier connecté :", req.user.city);
-
-//     const userCityId = req.user.city;
-
-//     if (!userCityId) {
-//       console.log("🚨 Ville absente dans req.user !");
-//       return res.status(400).json({ msg: "La ville de l'utilisateur n'est pas renseignée." });
-//     }
-
-//     // 🔥 On affiche tous les transferts à retirer dans la ville du caissier (ville de réception)
-//     const transfers = await InterCityTransfer.find({ receiverCity: userCityId })
-//       .populate("receiverCity", "name")
-//       .populate("senderCity", "name")
-//       .sort({ createdAt: -1 });
-
-//     // LOG pour compter et vérifier ce qui est trouvé
-//     console.log(`✅ [DEBUG] Transferts interville trouvés pour la ville ${userCityId}: ${transfers.length}`);
-
-//     res.json(transfers);
-//   } catch (error) {
-//     console.error("❌ Erreur récupération historique inter-ville :", error);
-//     res.status(500).json({ msg: "Erreur serveur" });
-//   }
-// };
 
 
 export const getInterCityTransfersHistory = async (req, res) => {

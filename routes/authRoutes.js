@@ -33,7 +33,8 @@ router.post("/reset-pin", authController.resetPIN);
 router.post("/change-pin", authController.changePIN);
 
 
-  
+router.post("/resend-otp",  authController.resendOTP); // ✅ nouvelle route
+
 
 // Déconnexion sécurisée
 router.post("/logout", authenticateUser, logoutUser);

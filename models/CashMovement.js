@@ -2,7 +2,13 @@ import mongoose from "mongoose";
 
 const CashMovementSchema = new mongoose.Schema({
   // cashRegister: { type: mongoose.Schema.Types.ObjectId, ref: "CashRegister", required: true },
-  cashRegister: { type: mongoose.Schema.Types.ObjectId, ref: "CashRegister", required: false },
+  // cashRegister: { type: mongoose.Schema.Types.ObjectId, ref: "CashRegister", required: false },
+
+  cashRegister: { type: mongoose.Schema.Types.ObjectId, ref: "CashRegister", required: true },
+
+sourceCashRegister: { type: mongoose.Schema.Types.ObjectId, ref: "CashRegister" }, // 🔁 optionnel
+
+settlement: { type: mongoose.Schema.Types.ObjectId, ref: "InternalSettlement" }, // 🔁 optionnel
 
   type: { type: String, enum: ["deposit", "withdrawal", "adjustment"], required: true },
   amount: { type: Number, required: true },
@@ -23,7 +29,9 @@ const CashMovementSchema = new mongoose.Schema({
       "intercity_receive",
       "intercity_cancel",      // 🔴 pour l'annulation
       "intercity_citychange",  // 🟠 pour le changement de ville
-      "intercity_auto_refund"  // 🔵 pour le reverse "me renvoyer à moi-même"
+      "intercity_auto_refund" , // 🔵 pour le reverse "me renvoyer à moi-même"
+      "intercity_compensation",        // ✅ remboursement vers la caisse B
+    "intercity_compensation_send"   // ✅ débit de la caisse A
     ], 
     default: "guichet" 
   },
@@ -32,17 +40,6 @@ const CashMovementSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "InterCityTransfer",
   }
-  
-  
-
-  // source: {
-  //   type: String,
-  //   enum: ["cashier", "supervisor"],
-  //   default: "cashier"
-  // }
-
-
-
 
 });
 

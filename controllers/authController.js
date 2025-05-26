@@ -28,61 +28,6 @@ const formatPhoneNumber = (phone) => phone.replace(/\s+/g, "").trim(); // Suppri
 
 // 🔹 INSCRIPTION
 
-// export const register = async (req, res) => {
-//   const { name, phone, password, role } = req.body;
-
-//   try {
-//       console.log("📥 Données reçues :", { name, phone, password, role });
-
-//       const formattedPhone = formatPhoneNumber(phone);
-//       console.log("📞 Numéro de téléphone formaté :", formattedPhone);
-
-//       let user = await User.findOne({ phone: formattedPhone });
-//       if (user) {
-//           console.log("⚠️ Utilisateur déjà existant :", user);
-//           return res.status(400).json({ msg: "Ce numéro est déjà utilisé." });
-//       }
-
-//       const pin = generatePIN(); // ✅ Générer le PIN temporaire
-//       console.log("🔢 PIN généré :", pin);
-
-//       user = new User({
-//           name,
-//           phone: formattedPhone,
-//           password, // ✅ On stocke le mot de passe en clair, il sera haché dans User.js
-//           pin, // ✅ Stocke temporairement en clair, il sera haché dans User.js
-//           role,
-//           virtualAccount: { balance: 0, currency: "XOF" }
-//       });
-
-//       await user.save();
-//       console.log("✅ Utilisateur enregistré avec succès :", user);
-
-//       // 🔍 Journaliser la création de l'utilisateur dans ActivityLog
-//       await ActivityLog.create({
-//         userId: user._id,
-//         action: "User Registration",
-//         details: `Nouvel utilisateur créé avec le rôle ${role} et le numéro ${formattedPhone}.`,
-//       });
-//       console.log("📝 Création de l'utilisateur enregistrée dans ActivityLog.");
-
-//       // Envoyer le PIN par SMS (en clair)
-//       await sendSMS(formattedPhone, `Votre code PIN NIYYA est : ${pin}. Ne le partagez avec personne.`);
-//       console.log("📤 SMS envoyé au :", formattedPhone);
-
-//       res.status(201).json({ msg: "Inscription réussie. Votre PIN a été envoyé par SMS." });
-
-//   } catch (error) {
-//       console.error("❌ Erreur lors de l'inscription :", error);
-//       res.status(500).json({ 
-//           msg: "Erreur du serveur.",
-//           error: error.message 
-//       });
-//   }
-// };
-
-
-
 export const register = async (req, res) => {
   const { name, phone, password, role } = req.body;
 
@@ -103,11 +48,28 @@ export const register = async (req, res) => {
       console.log("📞 Numéro de téléphone formaté :", formattedPhone);
 
       // ✅ Vérifier si l'utilisateur existe déjà
+      // let user = await User.findOne({ phone: formattedPhone });
+      // if (user) {
+      //     console.log("⚠️ Utilisateur déjà existant :", user);
+      //     return res.status(400).json({ msg: "Ce numéro est déjà utilisé." });
+      // }
+
+
       let user = await User.findOne({ phone: formattedPhone });
-      if (user) {
-          console.log("⚠️ Utilisateur déjà existant :", user);
-          return res.status(400).json({ msg: "Ce numéro est déjà utilisé." });
-      }
+
+if (user) {
+  if (user.isVerified) {
+    return res.status(400).json({ msg: "Ce numéro est déjà utilisé." });
+  }
+
+  // ✅ Supprimer le compte si l'OTP a expiré
+  if (user.otpExpiration && new Date() > user.otpExpiration) {
+    await User.deleteOne({ _id: user._id });
+  } else {
+    return res.status(400).json({ msg: "Un compte existe déjà avec ce numéro, en attente de vérification OTP." });
+  }
+}
+
 
       // ✅ Générer un PIN temporaire sécurisé
       const pin = generatePIN(); 
@@ -316,6 +278,8 @@ export const verifyOTP = async (req, res) => {
 
     // ✅ Activer le compte
     user.isActivated = true;
+    user.isVerified = true;
+
     user.otp = null;
     user.otpExpiration = null;
     await user.save();
@@ -536,6 +500,32 @@ const verifyPassword = async (req, res) => {
 };
 
 
+export const resendOTP = async (req, res) => {
+  const { phone } = req.body;
+
+  try {
+    const formattedPhone = phone.startsWith('+') ? phone : `+${phone}`;
+    const user = await User.findOne({ phone: formattedPhone });
+
+    if (!user) return res.status(404).json({ msg: "Utilisateur introuvable." });
+    if (user.isActivated) return res.status(400).json({ msg: "Le compte est déjà activé." });
+
+    const newOtp = generateOTP();
+    user.otp = newOtp;
+    user.otpExpiration = new Date(Date.now() + 5 * 60 * 1000);
+    await user.save();
+
+    await sendSMS(formattedPhone, `Votre nouveau code OTP est : ${newOtp}`);
+    res.status(200).json({ msg: "Nouveau code OTP envoyé avec succès." });
+
+  } catch (error) {
+    console.error("❌ Erreur resendOTP :", error);
+    res.status(500).json({ msg: "Erreur serveur." });
+  }
+};
+
+
+
 export default {
   register,
   login,
@@ -547,5 +537,6 @@ export default {
   getAuthenticatedUser,
   requestResetPassword,
   verifyResetOtp,
-  verifyPassword
+  verifyPassword,
+  resendOTP
 };

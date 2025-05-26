@@ -4,6 +4,71 @@ import { generateOTP } from "../services/otpService.js";
 import { sendSMS } from "../services/smsService.js";
 import City from "../models/City.js"; 
 import ActivityLog from "../models/ActivityLog.js";
+import InternalSettlement from "../models/InternalSettlement.js";
+import CashRegister from "../models/CashRegister.js";
+import CashMovement from "../models/CashMovement.js";
+
+
+
+
+import admin from "firebase-admin";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
+import fs from "fs";
+import path from "path";
+
+
+
+// import {  doc, setDoc, getDoc } from "firebase-admin/firestore";
+
+
+const serviceAccount = JSON.parse(
+  fs.readFileSync(path.join(process.cwd(), "firebase/firebaseServiceAccount.json"))
+);
+
+
+
+
+
+
+// S'assurer que Firebase Admin est initialisé
+if (!admin.apps.length) {
+  const serviceAccount = JSON.parse(
+    fs.readFileSync(path.resolve("firebase/firebaseServiceAccount.json"))
+  );
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
+
+export const startConversationWithUser = async (req, res) => {
+  try {
+    const { userPhone } = req.body;
+    const agentPhone = req.user.phone;
+
+    if (!userPhone) {
+      return res.status(400).json({ msg: "Numéro de l'utilisateur requis." });
+    }
+
+    const convoId = `${userPhone}_${agentPhone}`;
+    const db = getFirestore();
+    const convoRef = doc(db, "conversations", convoId);
+    const convoSnap = await getDoc(convoRef);
+
+    if (!convoSnap.exists()) {
+      await setDoc(convoRef, {
+        userPhone,
+        agentPhone,
+        messages: [],
+      });
+    }
+
+    res.status(201).json({ msg: "Conversation initialisée." });
+  } catch (error) {
+    console.error("❌ Erreur création conversation :", error);
+    res.status(500).json({ msg: "Erreur serveur." });
+  }
+};
+
 
 
 
@@ -114,3 +179,234 @@ export const toggleSupervisorStatus = async (req, res) => {
 
 
 
+
+
+// ✅ Créer un agent (rôle : "agent")
+
+// ✅ Initialiser Firebase Admin une seule fois
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
+
+export const createAgent = async (req, res) => {
+  try {
+    const { name, phone, password, pin } = req.body;
+
+    console.log("🧾 Données reçues :", req.body);
+
+    if (!name || !phone || !password) {
+      return res.status(400).json({ msg: "Nom, téléphone et mot de passe sont requis." });
+    }
+
+    // 🔍 Vérification si le téléphone est déjà utilisé
+    const existingUser = await User.findOne({ phone });
+    if (existingUser) {
+      return res.status(400).json({ msg: "Ce numéro est déjà utilisé." });
+    }
+
+    // ✅ Création du compte MongoDB
+    const newAgentData = {
+      name,
+      phone,
+      password,
+      role: "agent",
+      isVerified: true,
+      isActivated: true,
+    };
+    if (pin) newAgentData.pin = pin;
+
+    const agent = new User(newAgentData);
+    await agent.save();
+
+    // ✅ Ensuite : enregistrement dans Firestore
+const db = getFirestore();
+await db.collection("agents").doc(phone).set({
+  phone,
+  name,
+  createdAt: Timestamp.now(),
+});
+
+
+    res.status(201).json({
+      msg: "Agent créé avec succès.",
+      agent: {
+        _id: agent._id,
+        name: agent.name,
+        phone: agent.phone,
+        createdAt: agent.createdAt,
+      },
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur création agent :", error);
+    res.status(500).json({ msg: "Erreur serveur lors de la création de l'agent." });
+  }
+};
+
+
+
+
+
+// ✅ Obtenir tous les agents (triés du plus récent au plus ancien)
+export const getAllAgents = async (req, res) => {
+  try {
+    const agents = await User.find({ role: "agent" })
+      .select("name phone createdAt")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(agents);
+  } catch (error) {
+    console.error("Erreur récupération agents :", error);
+    res.status(500).json({ msg: "Erreur serveur lors de la récupération des agents." });
+  }
+};
+
+
+
+export const getInternalSettlements = async (req, res) => {
+  try {
+    const settlements = await InternalSettlement.find()
+      .populate("fromCashRegister", "registerNumber")
+      .populate("toCashRegister", "registerNumber")
+      .populate("interCityTransfer", "amount status");
+
+    res.status(200).json(settlements);
+  } catch (error) {
+    console.error("❌ Erreur récupération des compensations :", error);
+    res.status(500).json({ msg: "Erreur serveur lors de la récupération des compensations." });
+  }
+};
+
+
+
+
+
+
+export const settleInternalSettlement = async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`📥 Requête de validation de compensation pour l'ID : ${id}`);
+
+    const settlement = await InternalSettlement.findById(id)
+      .populate("fromCashRegister", "registerNumber currentBalance")
+      .populate("toCashRegister", "registerNumber currentBalance");
+
+    if (!settlement) {
+      return res.status(404).json({ msg: "Compensation introuvable." });
+    }
+
+    console.log("🔍 Compensation récupérée :", {
+      amount: settlement.amount,
+      from: settlement.fromCashRegister?.registerNumber,
+      to: settlement.toCashRegister?.registerNumber,
+      settled: settlement.settled,
+    });
+
+    if (settlement.settled) {
+      return res.status(400).json({ msg: "Déjà réglée." });
+    }
+
+    // ✅ Étape 1 : marquer comme réglée
+    settlement.settled = true;
+    settlement.updatedAt = new Date();
+    await settlement.save();
+    console.log("✅ Compensation marquée comme réglée.");
+
+    // ✅ Étape 2 : créditer la caisse B
+    await CashMovement.create({
+      cashRegister: settlement.toCashRegister._id,
+      type: "deposit",
+      amount: settlement.amount,
+      operationType: "intercity_compensation",
+      performedBy: req.user._id,
+      note: `Remboursement de ${settlement.amount} XOF par la caisse ${settlement.fromCashRegister?.registerNumber}`,
+      date: new Date(),
+    });
+
+    const caisseB = await CashRegister.findById(settlement.toCashRegister._id);
+    caisseB.currentBalance += settlement.amount;
+    await caisseB.save();
+    console.log(`✅ Caisse B (${caisseB.registerNumber}) créditée de ${settlement.amount}. Nouveau solde : ${caisseB.currentBalance}`);
+
+    // ✅ Étape 3 : débiter la caisse A
+    await CashMovement.create({
+      cashRegister: settlement.fromCashRegister._id,
+      type: "withdrawal",
+      amount: settlement.amount,
+      operationType: "intercity_compensation_send",
+      performedBy: req.user._id,
+      note: `Débit de compensation envoyée vers ${settlement.toCashRegister?.registerNumber}`,
+      date: new Date(),
+    });
+
+    const caisseA = await CashRegister.findById(settlement.fromCashRegister._id);
+    caisseA.currentBalance -= settlement.amount;
+    await caisseA.save();
+    console.log(`✅ Caisse A (${caisseA.registerNumber}) débitée de ${settlement.amount}. Nouveau solde : ${caisseA.currentBalance}`);
+
+    return res.status(200).json({ msg: "Compensation réglée entre les deux caisses." });
+
+  } catch (error) {
+    console.error("❌ Erreur validation compensation :", error);
+    return res.status(500).json({ msg: "Erreur serveur." });
+  }
+};
+
+
+
+export const getCompensationSummary = async (req, res) => {
+  try {
+    // 🔍 Récupérer toutes les compensations réglées
+    const settlements = await InternalSettlement.find({ settled: true })
+      .populate({
+        path: "fromCashRegister",
+        populate: {
+          path: "supervisor",
+          populate: { path: "city", select: "name" },
+        },
+      })
+      .populate({
+        path: "toCashRegister",
+        populate: {
+          path: "supervisor",
+          populate: { path: "city", select: "name" },
+        },
+      });
+
+    const perCity = {};   // 🔄 Données groupées par ville
+    const perCash = {};   // 🔄 Données groupées par caisse
+
+    settlements.forEach((settlement) => {
+      const from = settlement.fromCashRegister;
+      const to = settlement.toCashRegister;
+      const amount = settlement.amount;
+
+      const fromCityName = from?.supervisor?.city?.name || "Inconnue";
+      const toCityName = to?.supervisor?.city?.name || "Inconnue";
+
+      // 🔹 Par ville
+      if (!perCity[fromCityName]) perCity[fromCityName] = { paid: 0, received: 0 };
+      if (!perCity[toCityName]) perCity[toCityName] = { paid: 0, received: 0 };
+
+      perCity[fromCityName].paid += amount;
+      perCity[toCityName].received += amount;
+
+      // 🔹 Par caisse
+      const fromCash = from?.registerNumber || "Caisse inconnue";
+      const toCash = to?.registerNumber || "Caisse inconnue";
+
+      if (!perCash[fromCash]) perCash[fromCash] = { paid: 0, received: 0 };
+      if (!perCash[toCash]) perCash[toCash] = { paid: 0, received: 0 };
+
+      perCash[fromCash].paid += amount;
+      perCash[toCash].received += amount;
+    });
+
+    return res.status(200).json({ perCity, perCash });
+  } catch (error) {
+    console.error("❌ Erreur génération du rapport de compensation :", error);
+    return res.status(500).json({ msg: "Erreur serveur." });
+  }
+};

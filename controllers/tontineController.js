@@ -9,244 +9,124 @@ import TontineCommissionHistory from "../models/TontineCommissionHistory.js";
 
 
 // ✅ Créer une tontine
+
+
 export const createTontine = async (req, res) => {
   try {
-      // const { name, contributionAmount, totalCycles, startDate, frequency } = req.body;
+    let { name, contributionAmount, totalCycles, startDate, frequency } = req.body;
 
-      let { name, contributionAmount, totalCycles, startDate, frequency } = req.body;
+    // 🔐 Générer un suffixe unique
+    const uniqueSuffix = Math.floor(1000 + Math.random() * 9000);
+    name = `${name.trim()}-${uniqueSuffix}`;
 
-// 🔐 Générer un suffixe unique
-const uniqueSuffix = Math.floor(1000 + Math.random() * 9000);
-name = `${name.trim()}-${uniqueSuffix}`;
+    // ✅ Traitement de la date (ex: "2025-05-30")
+    if (startDate) {
+      console.log("📥 startDate reçu :", startDate);
+      const parsedDate = new Date(startDate);
+      console.log("📆 Date JS construite :", parsedDate);
 
+      if (isNaN(parsedDate.getTime())) {
+        return res.status(400).json({ msg: "Date de départ invalide." });
+      }
 
-// ✅ Reformater la date depuis JJ-MM-AAAA en Date JS
-if (startDate && typeof startDate === "string") {
-  const [day, month, year] = startDate.split("-");
-  const parsedDate = new Date(`${year}-${month}-${day}`);
-  if (isNaN(parsedDate.getTime())) {
-    return res.status(400).json({ msg: "Date de départ invalide." });
-  }
-  startDate = parsedDate;
-}
+      startDate = parsedDate;
+    } else {
+      return res.status(400).json({ msg: "Date de départ manquante." });
+    }
 
+    const initiator = req.user._id;
 
+    // 🛑 Vérifier que l'utilisateur n'est pas déjà dans une tontine active
+    const isInitiator = await Tontine.exists({ initiator, status: "active" });
+    const isMember = await Tontine.exists({
+      status: "active",
+      "members.user": initiator
+    });
+    if (isInitiator || isMember) {
+      return res.status(400).json({
+        msg: "❌ Vous participez déjà à une tontine active (en tant qu’initiateur ou membre)."
+      });
+    }
 
-      const initiator = req.user._id;
-
-// 🛑 Nouvelle vérification (avant toute création de tontine)
-const isInitiator = await Tontine.exists({ initiator, status: "active" });
-const isMember = await Tontine.exists({
-  status: "active",
-  "members.user": initiator
-});
-if (isInitiator || isMember) {
-  return res.status(400).json({
-    msg: "❌ Vous participez déjà à une tontine active (en tant qu’initiateur ou membre). Vous ne pouvez pas en créer ou rejoindre une autre tant qu'elle n'est pas clôturée."
-  });
-}
-
-         // ✅ Limite globale : ne pas dépasser 200 tontines actives
+    // ✅ Limite globale
     const MAX_TONTINES = 200;
     const activeTontinesCount = await Tontine.countDocuments({ status: "active" });
     if (activeTontinesCount >= MAX_TONTINES) {
-      return res.status(400).json({ msg: "🚫 Limite atteinte : nombre maximum de tontines actives (200)." });
+      return res.status(400).json({ msg: "🚫 Limite atteinte : 200 tontines actives." });
     }
 
- 
-      // Vérifier si une tontine avec ce nom existe déjà
-      const existingTontine = await Tontine.findOne({ name, initiator });
-      if (existingTontine) {
-          return res.status(400).json({ msg: "Vous avez déjà une tontine avec ce nom." });
+    // 🔍 Vérifier doublon
+    const existingTontine = await Tontine.findOne({ name, initiator });
+    if (existingTontine) {
+      return res.status(400).json({ msg: "Vous avez déjà une tontine avec ce nom." });
+    }
+
+    // ✅ Créer la tontine
+    const tontine = new Tontine({
+      name,
+      initiator,
+      contributionAmount,
+      totalCycles,
+      startDate,
+      frequency,
+      currentCycle: 1,
+      status: "active",
+      virtualAccount: { balance: 0, currency: "XOF" },
+      members: [{ user: initiator, joinedAt: new Date() }]
+    });
+
+    await tontine.save();
+
+    // 📅 Initialiser les cycles
+    const cycles = [];
+    const initialDate = new Date(startDate);
+
+    for (let i = 0; i < totalCycles; i++) {
+      const dueDate = new Date(initialDate);
+      if (frequency === "weekly") {
+        dueDate.setDate(initialDate.getDate() + i * 7);
+      } else if (frequency === "monthly") {
+        dueDate.setMonth(initialDate.getMonth() + i);
       }
 
-      // Créer la tontine avec un compte virtuel
-      const tontine = new Tontine({
-          name,
-          initiator,
-          contributionAmount,
-          totalCycles,
-          startDate,
-          frequency,
-          currentCycle: 1,
-          status: "active",
-          virtualAccount: { balance: 0, currency: "XOF" },
-          members: [{ user: initiator, joinedAt: new Date() }] // 🔹 Ajout de l'initiateur automatiquement
+      const cycle = new TontineCycle({
+        tontine: tontine._id,
+        cycleNumber: i + 1,
+        dueDate,
+        isCompleted: false
       });
 
-      await tontine.save();
+      await cycle.save();
+      cycles.push(cycle);
+    }
 
-      // 📅 Initialiser les cycles
-      const cycles = [];
-      const initialDate = new Date(startDate);
+    // 💰 Paiements pré-remplis pour l’initiateur
+    const payments = cycles.map((cycle) => ({
+      tontine: tontine._id,
+      user: initiator,
+      cycle: cycle._id,
+      amountPaid: 0,
+      hasPaid: false,
+      paymentDate: null,
+      paymentMethod: "compte_virtuel"
+    }));
 
-      for (let i = 0; i < totalCycles; i++) {
-          const dueDate = new Date(initialDate);
-          if (frequency === "weekly") {
-              dueDate.setDate(initialDate.getDate() + i * 7);
-          } else if (frequency === "monthly") {
-              dueDate.setMonth(initialDate.getMonth() + i);
-          }
+    await TontinePayment.insertMany(payments);
 
-          const cycle = new TontineCycle({
-              tontine: tontine._id,
-              cycleNumber: i + 1,
-              dueDate,
-              isCompleted: false
-          });
+    console.log("✅ Tontine et cycles créés avec succès :", tontine.name);
+    return res.status(201).json({
+      msg: "✅ Tontine et cycles créés avec succès.",
+      tontine,
+      cycles
+    });
 
-          await cycle.save();
-          cycles.push(cycle);
-      }
-
-
-      // ✅ Initialiser les paiements pour l'initiateur avec `paymentMethod`
-const payments = cycles.map((cycle) => ({
-  tontine: tontine._id,
-  user: initiator,
-  cycle: cycle._id,
-  amountPaid: 0,
-  hasPaid: false,
-  paymentDate: null,
-  paymentMethod: "compte_virtuel", // 🔥 Correction : Ajouter un mode de paiement par défaut
-}));
-
-await TontinePayment.insertMany(payments);
-
-
-      console.log("✅ Tontine et cycles créés avec succès :", tontine);
-      return res.status(201).json({ msg: "✅ Tontine et cycles créés avec succès.", tontine, cycles });
   } catch (error) {
-      console.error("❌ Erreur lors de la création de la tontine :", error);
-      res.status(500).json({ msg: "Erreur serveur." });
+    console.error("❌ Erreur lors de la création de la tontine :", error);
+    res.status(500).json({ msg: "Erreur serveur." });
   }
 };
 
 
-
-
-// export const enrollMember = async (req, res) => {
-//   try {
-//     const { tontineId } = req.params;
-//     const { phone } = req.body;
-//     const initiatorId = req.user._id; // ✅ Utilisateur connecté
-
-//     console.log("📡 Tentative d'enrôlement avec le téléphone :", phone);
-
-//     // 🔍 Vérifier si l'utilisateur existe et récupérer son rôle
-//     const user = await User.findOne({ phone }).select("_id name phone role");
-
-
-
-
-//     // ❌ Vérifier s'il est déjà membre d'une autre tontine active
-//     const activeTontinesWithUser = await Tontine.findOne({
-//       status: "active",
-//       "members.user": user._id,
-//       _id: { $ne: tontineId }, // exclure la tontine actuelle
-//     });
-    
-//     if (activeTontinesWithUser) {
-//       return res.status(400).json({
-//         msg: "⚠️ Cet utilisateur participe déjà à une autre tontine active.",
-//       });
-//     }
-
-    
-
-
-//     if (!user) {
-//       console.error("❌ Utilisateur introuvable :", phone);
-//       return res.status(404).json({ msg: "Utilisateur non trouvé." });
-//     }
-
-//     if (user.role !== "user") {
-//       console.error("❌ Enrôlement refusé : L'utilisateur n'a pas le rôle 'user'.");
-//       return res.status(403).json({ msg: "Seuls les utilisateurs avec le rôle 'user' peuvent être enrôlés." });
-//     }
-
-//     console.log("✅ Utilisateur trouvé et valide :", user);
-
-    
-
-//     // ✅ Vérifier si la tontine existe
-//     const tontine = await Tontine.findById(tontineId);
-//     if (!tontine) {
-//       console.error("❌ Tontine non trouvée :", tontineId);
-//       return res.status(404).json({ msg: "Tontine non trouvée." });
-//     }
-
-//     // ✅ Vérifier que le demandeur est bien l’initiateur
-//     if (String(tontine.initiator) !== String(initiatorId)) {
-//       console.error("❌ Accès interdit : seul l’initiateur peut enrôler des membres.");
-//       return res.status(403).json({ msg: "Accès interdit. Seul l’initiateur de la tontine peut ajouter des membres." });
-//     }
-
-//     console.log("✅ Tontine trouvée :", tontine.name);
-
-//     // ✅ Vérifier si l'utilisateur est déjà enrôlé
-//     const isAlreadyMember = tontine.members.some((m) => String(m.user) === String(user._id));
-//     if (isAlreadyMember) {
-//       return res.status(400).json({ msg: "⚠️ Membre déjà enrôlé dans cette tontine." });
-//     }
-
-//     // 📅 Initialiser les paiements pour chaque cycle
-//     const payments = [];
-//     const cycles = await TontineCycle.find({ tontine: tontineId });
-
-       
-//     for (const cycle of cycles) {
-//       // ⚠️ Vérifie s’il existe déjà un paiement pour ce user et ce cycle
-//       const existingPayment = await TontinePayment.findOne({
-//         tontine: tontineId,
-//         user: user._id,
-//         cycle: cycle._id,
-//       });
-    
-//       if (!existingPayment) {
-//         const newPayment = new TontinePayment({
-//           tontine: tontineId,
-//           user: user._id,
-//           cycle: cycle._id,
-//           amountPaid: 0,
-//           hasPaid: false,
-//           paymentDate: null,
-//           paymentMethod: "compte_virtuel",
-//         });
-    
-//         await newPayment.save();
-//         payments.push(newPayment);
-    
-//         // 🧠 Utilise $addToSet pour éviter les doublons dans le tableau `payments`
-//         await TontineCycle.findByIdAndUpdate(
-//           cycle._id,
-//           { $addToSet: { payments: newPayment._id } },
-//           { new: true }
-//         );
-//       }
-//     }
-    
-//   tontine.members.push({ user: user._id });
-//   await tontine.save();
-
-
-
-//     // ✅ Envoyer un SMS de notification au nouveau membre
-// const message = `📢 Bonjour ${user.name} ! Vous avez été ajouté à la tontine "${tontine.name}".
-// Connectez-vous à l'application pour consulter les conditions et vérifier vos échéances.`;
-
-// await sendSMS(user.phone, message);
-// console.log(`📨 SMS envoyé à ${user.phone}`);
-
-
-//     console.log(`✅ Membre ajouté avec succès : ${user.name} (${user.phone})`);
-//     res.status(200).json({ msg: "✅ Membre ajouté avec succès." });
-
-//   } catch (error) {
-//     console.error("❌ Erreur lors de l'enrôlement du membre :", error);
-//     res.status(500).json({ msg: "Erreur serveur." });
-//   }
-// };
 
 
 
@@ -1213,6 +1093,168 @@ export const getPendingCyclesReport = async (req, res) => {
   }
 };
 
+
+
+// export const updateTontineByInitiator = async (req, res) => {
+//   try {
+//     const { tontineId } = req.params;
+//     const initiatorId = req.user._id;
+//     const {
+//       name,
+//       contributionAmount,
+//       totalCycles,
+//       frequency,
+//       startDate,
+//     } = req.body;
+
+//     // 🔒 Vérifier si la tontine existe et appartient à l'utilisateur
+//     const tontine = await Tontine.findById(tontineId);
+//     if (!tontine) {
+//       return res.status(404).json({ msg: "Tontine non trouvée." });
+//     }
+
+//     if (String(tontine.initiator) !== String(initiatorId)) {
+//       return res.status(403).json({ msg: "Accès refusé. Vous n'êtes pas l'initiateur de cette tontine." });
+//     }
+
+//     if (tontine.status !== "active") {
+//       return res.status(400).json({ msg: "Seules les tontines actives peuvent être modifiées." });
+//     }
+
+
+
+
+
+//    if (startDate && String(startDate) !== tontine.startDate.toISOString().split("T")[0]) {
+//   const existingPaid = await TontinePayment.exists({
+//     tontine: tontine._id,
+//     hasPaid: true,
+//   });
+
+//   if (existingPaid) {
+//     return res.status(400).json({
+//       msg: "❌ Impossible de modifier la date de démarrage : des paiements ont déjà été effectués.",
+//     });
+//   }
+
+//   // ✅ Vérification du format de la date (JJ-MM-AAAA)
+//   const [day, month, year] = startDate.split("-");
+//   const parsedDate = new Date(`${year}-${month}-${day}`);
+
+//   if (isNaN(parsedDate)) {
+//     return res.status(400).json({ msg: "❌ Format de date invalide." });
+//   }
+
+//   tontine.startDate = parsedDate;
+// }
+
+
+
+
+
+
+
+//     // 🔒 Blocage modification fréquence ou totalCycles si un cycle a commencé
+//     const firstCycleStarted = await TontineCycle.exists({
+//       tontine: tontine._id,
+//       cycleNumber: 1,
+//       status: { $ne: "pending" }, // started = in_progress ou completed
+//     });
+
+//     if (firstCycleStarted) {
+//       if (frequency && frequency !== tontine.frequency) {
+//         return res.status(400).json({
+//           msg: "❌ Impossible de modifier la fréquence : un cycle a déjà démarré.",
+//         });
+//       }
+
+//       if (totalCycles && totalCycles !== tontine.totalCycles) {
+//         return res.status(400).json({
+//           msg: "❌ Impossible de modifier le nombre de cycles : un cycle a déjà démarré.",
+//         });
+//       }
+//     }
+
+//     // ✅ Appliquer les autres mises à jour autorisées
+//     tontine.name = name || tontine.name;
+//     tontine.contributionAmount = contributionAmount || tontine.contributionAmount;
+//     tontine.frequency = frequency || tontine.frequency;
+//     tontine.totalCycles = totalCycles || tontine.totalCycles;
+
+
+//     // 🔄 Supprimer les cycles et paiements si totalCycles a diminué
+// if (totalCycles < tontine.totalCycles) {
+//   // Récupérer tous les cycles de la tontine
+//   const allCycles = await TontineCycle.find({ tontine: tontine._id });
+
+//   // Trouver les cycles à supprimer
+//   const extraCycles = allCycles.filter(c => c.cycleNumber > totalCycles);
+//   const extraCycleIds = extraCycles.map(c => c._id);
+
+//   // Vérification : s'assurer qu'aucun paiement ou bénéficiaire n'existe
+//   const hasPaidOrServed = await TontinePayment.exists({
+//     cycle: { $in: extraCycleIds },
+//     hasPaid: true
+//   }) || await TontineCycle.exists({
+//     _id: { $in: extraCycleIds },
+//     beneficiary: { $ne: null }
+//   });
+
+//   if (hasPaidOrServed) {
+//     return res.status(400).json({
+//       msg: "❌ Impossible de réduire le nombre de cycles : un cycle à supprimer contient déjà des paiements ou un bénéficiaire."
+//     });
+//   }
+
+//   // 🔥 Supprimer les paiements liés à ces cycles
+//   await TontinePayment.deleteMany({ cycle: { $in: extraCycleIds } });
+
+//   // 🧹 Supprimer les cycles
+//   await TontineCycle.deleteMany({ _id: { $in: extraCycleIds } });
+// }
+
+
+//     await tontine.save();
+
+
+
+//   // 🔄 Mettre à jour les dates des cycles si fréquence ou date changée (et aucun paiement ni bénéficiaire)
+// const hasAnyPayment = await TontinePayment.exists({
+//   tontine: tontine._id,
+//   hasPaid: true,
+// });
+
+// const hasAnyBeneficiary = await TontineCycle.exists({
+//   tontine: tontine._id,
+//   beneficiary: { $ne: null },
+// });
+
+// if (!hasAnyPayment && !hasAnyBeneficiary) {
+//   const newStartDate = tontine.startDate;
+//   const cycles = await TontineCycle.find({ tontine: tontine._id }).sort("cycleNumber");
+
+//   for (let i = 0; i < cycles.length; i++) {
+//     const cycle = cycles[i];
+//     const dueDate = new Date(newStartDate);
+//     if (tontine.frequency === "weekly") {
+//       dueDate.setDate(newStartDate.getDate() + i * 7);
+//     } else if (tontine.frequency === "monthly") {
+//       dueDate.setMonth(newStartDate.getMonth() + i);
+//     }
+
+//     cycle.dueDate = dueDate;
+//     await cycle.save();
+//   }
+// }
+
+
+//     res.status(200).json({ msg: "✅ Tontine modifiée avec succès.", tontine });
+//   } catch (error) {
+//     console.error("❌ Erreur lors de la modification de la tontine :", error);
+//     res.status(500).json({ msg: "Erreur serveur lors de la modification." });
+//   }
+// };
+
 export const updateTontineByInitiator = async (req, res) => {
   try {
     const { tontineId } = req.params;
@@ -1225,9 +1267,7 @@ export const updateTontineByInitiator = async (req, res) => {
       startDate,
     } = req.body;
 
-    // 🔒 Vérifier si la tontine existe et appartient à l'utilisateur
     const tontine = await Tontine.findById(tontineId);
-
     if (!tontine) {
       return res.status(404).json({ msg: "Tontine non trouvée." });
     }
@@ -1240,18 +1280,152 @@ export const updateTontineByInitiator = async (req, res) => {
       return res.status(400).json({ msg: "Seules les tontines actives peuvent être modifiées." });
     }
 
-    // ✅ Mettre à jour les champs autorisés
-    tontine.name = name || tontine.name;
-    tontine.contributionAmount = contributionAmount || tontine.contributionAmount;
-    tontine.totalCycles = totalCycles || tontine.totalCycles;
-    tontine.frequency = frequency || tontine.frequency;
+    // ✅ Conversion de la date si elle a changé
+    if (startDate && String(startDate) !== tontine.startDate.toISOString().split("T")[0]) {
+      const existingPaid = await TontinePayment.exists({
+        tontine: tontine._id,
+        hasPaid: true,
+      });
 
-    if (startDate) {
+      if (existingPaid) {
+        return res.status(400).json({
+          msg: "❌ Impossible de modifier la date de démarrage : des paiements ont déjà été effectués.",
+        });
+      }
+
       const [day, month, year] = startDate.split("-");
-      tontine.startDate = new Date(`${year}-${month}-${day}`);
+      const parsedDate = new Date(`${year}-${month}-${day}`);
+      if (isNaN(parsedDate)) {
+        return res.status(400).json({ msg: "❌ Format de date invalide." });
+      }
+
+      tontine.startDate = parsedDate;
     }
 
+    // 🔒 Blocage de fréquence et totalCycles si un cycle a démarré
+    const firstCycleStarted = await TontineCycle.exists({
+      tontine: tontine._id,
+      cycleNumber: 1,
+      status: { $ne: "pending" },
+    });
+
+    if (firstCycleStarted) {
+      if (frequency && frequency !== tontine.frequency) {
+        return res.status(400).json({
+          msg: "❌ Impossible de modifier la fréquence : un cycle a déjà démarré.",
+        });
+      }
+
+      if (totalCycles && totalCycles !== tontine.totalCycles) {
+        return res.status(400).json({
+          msg: "❌ Impossible de modifier le nombre de cycles : un cycle a déjà démarré.",
+        });
+      }
+    }
+
+    // ✅ Appliquer les modifications locales
+    tontine.name = name || tontine.name;
+    tontine.contributionAmount = contributionAmount || tontine.contributionAmount;
+    const newTotalCycles = totalCycles || tontine.totalCycles;
+    const newFrequency = frequency || tontine.frequency;
+    tontine.frequency = newFrequency;
+
+    
+
+
+
+
+
+
+    // 🔄 Supprimer les cycles et paiements si on réduit le nombre de cycles
+if (newTotalCycles < tontine.totalCycles) {
+  const allCycles = await TontineCycle.find({ tontine: tontine._id });
+  const extraCycles = allCycles.filter(c => c.cycleNumber > newTotalCycles);
+  const extraCycleIds = extraCycles.map(c => c._id);
+
+  const hasPaidOrServed = await TontinePayment.exists({
+    cycle: { $in: extraCycleIds },
+    hasPaid: true,
+  }) || await TontineCycle.exists({
+    _id: { $in: extraCycleIds },
+    beneficiary: { $ne: null }
+  });
+
+  if (hasPaidOrServed) {
+    return res.status(400).json({
+      msg: "❌ Impossible de réduire le nombre de cycles : certains cycles ont déjà des paiements ou un bénéficiaire.",
+    });
+  }
+
+  // 🔥 Supprimer les paiements liés à ces cycles
+  await TontinePayment.deleteMany({ cycle: { $in: extraCycleIds } });
+
+  // 🧹 Supprimer les cycles
+  await TontineCycle.deleteMany({ _id: { $in: extraCycleIds } });
+
+  // 🧹 Supprimer les paiements orphelins (liés à des cycles supprimés)
+  await TontinePayment.deleteMany({
+    tontine: tontine._id,
+    cycle: { $nin: await TontineCycle.find({ tontine: tontine._id }).distinct("_id") },
+  });
+
+  // 🧹 Supprimer les paiements de membres qui ne sont plus dans la tontine
+  const currentMemberIds = tontine.members.map((m) => String(m.user));
+  await TontinePayment.deleteMany({
+    tontine: tontine._id,
+    user: { $nin: currentMemberIds },
+  });
+}
+
+
+
+
+    tontine.totalCycles = newTotalCycles;
+
     await tontine.save();
+
+    // 🧹 Nettoyage des cycles : retirer les paiements obsolètes du tableau `payments`
+const cyclesToClean = await TontineCycle.find({ tontine: tontine._id });
+
+for (const cycle of cyclesToClean) {
+  const validPayments = await TontinePayment.find({ cycle: cycle._id }).select("_id");
+  const validPaymentIds = validPayments.map(p => p._id.toString());
+
+  // Filtrer uniquement les IDs valides dans le tableau `payments` du cycle
+  cycle.payments = (cycle.payments || []).filter(pId => validPaymentIds.includes(pId.toString()));
+  await cycle.save();
+}
+
+
+    // 🔁 Recalculer les dates si aucun paiement ou bénéficiaire
+    const hasAnyPayment = await TontinePayment.exists({
+      tontine: tontine._id,
+      hasPaid: true,
+    });
+
+    const hasAnyBeneficiary = await TontineCycle.exists({
+      tontine: tontine._id,
+      beneficiary: { $ne: null },
+    });
+
+    if (!hasAnyPayment && !hasAnyBeneficiary) {
+      const cycles = await TontineCycle.find({ tontine: tontine._id }).sort("cycleNumber");
+      const newStartDate = tontine.startDate;
+
+      for (let i = 0; i < cycles.length; i++) {
+        const cycle = cycles[i];
+        const dueDate = new Date(newStartDate);
+
+        if (newFrequency === "weekly") {
+          dueDate.setDate(newStartDate.getDate() + i * 7);
+        } else if (newFrequency === "monthly") {
+          dueDate.setMonth(newStartDate.getMonth() + i);
+        }
+
+        cycle.dueDate = dueDate;
+        await cycle.save();
+      }
+    }
 
     res.status(200).json({ msg: "✅ Tontine modifiée avec succès.", tontine });
   } catch (error) {
@@ -1259,7 +1433,6 @@ export const updateTontineByInitiator = async (req, res) => {
     res.status(500).json({ msg: "Erreur serveur lors de la modification." });
   }
 };
-
 
 
 export const getTontineById = async (req, res) => {
@@ -1298,23 +1471,252 @@ export const getTontineWithMembers = async (req, res) => {
   }
 };
 
-
 export const removeTontineMember = async (req, res) => {
   try {
     const { tontineId, memberId } = req.params;
 
-    const deleted = await TontinePayment.findOneAndDelete({
-      tontine: tontineId,
-      _id: memberId,
-    });
-
-    if (!deleted) {
-      return res.status(404).json({ msg: "Membre non trouvé." });
+    // 1️⃣ Vérifier la tontine
+    const tontine = await Tontine.findById(tontineId);
+    if (!tontine) {
+      return res.status(404).json({ msg: "❌ Tontine introuvable. Opération annulée." });
     }
 
-    res.status(200).json({ msg: "Membre retiré avec succès." });
+    // 2️⃣ Ne pas supprimer l'initiateur
+    if (String(tontine.initiator) === String(memberId)) {
+      return res.status(400).json({
+        msg: "❌ L'initiateur de la tontine ne peut pas être supprimé.",
+      });
+    }
+
+    // 3️⃣ Vérifier si le membre a déjà payé
+    const hasPaid = await TontinePayment.exists({
+      tontine: tontineId,
+      user: memberId,
+      hasPaid: true,
+    });
+    if (hasPaid) {
+      return res.status(400).json({
+        msg: "❌ Ce membre ne peut pas être supprimé car il a déjà effectué au moins un paiement.",
+      });
+    }
+
+    // 4️⃣ Vérifier si le membre a été bénéficiaire
+    const wasBeneficiary = tontine.beneficiaries.some(
+      (b) => String(b) === String(memberId)
+    );
+    if (wasBeneficiary) {
+      return res.status(400).json({
+        msg: "❌ Ce membre ne peut pas être supprimé car il a déjà reçu un versement.",
+      });
+    }
+
+    // 5️⃣ Supprimer les paiements du membre
+    await TontinePayment.deleteMany({ tontine: tontineId, user: memberId });
+
+    // 6️⃣ Retirer le membre de la tontine
+    tontine.members = tontine.members.filter((m) => String(m.user) !== String(memberId));
+    await tontine.save();
+
+    res.status(200).json({ msg: "✅ Membre retiré avec succès." });
   } catch (error) {
-    console.error("❌ Erreur lors du retrait :", error);
-    res.status(500).json({ msg: "Erreur serveur." });
+    console.error("❌ Erreur lors du retrait du membre :", error);
+    res.status(500).json({ msg: "❌ Une erreur technique est survenue. Veuillez réessayer plus tard." });
+  }
+};
+
+
+
+
+// export const replaceTontineMember = async (req, res) => {
+//   try {
+//     const { tontineId } = req.params;
+//     const { oldMemberPhone, newMemberPhone } = req.body;
+//     const initiatorId = req.user._id;
+
+//     // 🔍 Charger la tontine
+//     const tontine = await Tontine.findById(tontineId);
+//     if (!tontine) return res.status(404).json({ msg: "Tontine introuvable." });
+
+//     // 🔐 Vérifier que l'utilisateur est bien l'initiateur
+//     if (String(tontine.initiator) !== String(initiatorId)) {
+//       return res.status(403).json({ msg: "Accès refusé. Seul l’initiateur peut remplacer un membre." });
+//     }
+
+//     // 🔎 Trouver les deux utilisateurs
+//     const oldMember = await User.findOne({ phone: oldMemberPhone });
+//     const newMember = await User.findOne({ phone: newMemberPhone });
+
+//     if (!oldMember || !newMember) {
+//       return res.status(404).json({ msg: "Utilisateur introuvable (ancien ou nouveau membre)." });
+//     }
+
+//     if (String(oldMember._id) === String(newMember._id)) {
+//       return res.status(400).json({ msg: "Les deux membres sont identiques." });
+//     }
+
+//  // 🔒 Interdire si le membre a déjà été bénéficiaire
+// const alreadyBeneficiary = tontine.beneficiaries.includes(oldMember._id);
+// if (alreadyBeneficiary) {
+//   return res.status(400).json({
+//     msg: "❌ Ce membre a déjà reçu sa part. Il ne peut pas être remplacé.",
+//   });
+// }
+
+// // 🔒 Interdire si le membre a déjà payé au moins une fois
+// const hasPaid = await TontinePayment.exists({
+//   tontine: tontineId,
+//   user: oldMember._id,
+//   hasPaid: true,
+// });
+// if (hasPaid) {
+//   return res.status(400).json({
+//     msg: "❌ Ce membre a déjà effectué une cotisation. Il ne peut pas être remplacé.",
+//   });
+// }
+
+
+//     // 🔒 Interdire si le nouveau membre est déjà dans la tontine
+//     const alreadyIn = tontine.members.some((m) => String(m.user) === String(newMember._id));
+//     if (alreadyIn) {
+//       return res.status(400).json({ msg: "Le nouveau membre est déjà inscrit dans cette tontine." });
+//     }
+
+//     // ❌ Supprimer tous les paiements du membre sortant
+//     await TontinePayment.deleteMany({ tontine: tontineId, user: oldMember._id });
+
+//     // ❌ Supprimer du tableau des membres
+//     tontine.members = tontine.members.filter((m) => String(m.user) !== String(oldMember._id));
+
+//     // ✅ Ajouter le nouveau membre
+//     tontine.members.push({ user: newMember._id, joinedAt: new Date() });
+//     await tontine.save();
+
+//     // ✅ Créer les paiements du nouveau membre
+//     const cycles = await TontineCycle.find({ tontine: tontineId });
+//     const payments = cycles.map((cycle) => ({
+//       tontine: tontineId,
+//       user: newMember._id,
+//       cycle: cycle._id,
+//       amountPaid: 0,
+//       hasPaid: false,
+//       paymentDate: null,
+//       paymentMethod: "compte_virtuel",
+//     }));
+
+//     await TontinePayment.insertMany(payments);
+
+//     res.status(200).json({
+//       msg: "✅ Remplacement effectué avec succès.",
+//       oldMember: { name: oldMember.name, phone: oldMember.phone },
+//       newMember: { name: newMember.name, phone: newMember.phone },
+//     });
+//   } catch (error) {
+//     console.error("❌ Erreur lors du remplacement du membre :", error);
+//     res.status(500).json({ msg: "Erreur serveur lors du remplacement." });
+//   }
+// };
+
+
+
+
+export const replaceTontineMember = async (req, res) => {
+  try {
+    const { tontineId } = req.params;
+    const { oldMemberPhone, newMemberPhone, password } = req.body;
+    const initiatorId = req.user._id;
+
+    // 🔍 Charger la tontine
+    const tontine = await Tontine.findById(tontineId);
+    if (!tontine) return res.status(404).json({ msg: "Tontine introuvable." });
+
+    // 🔐 Vérifier que l'utilisateur est bien l'initiateur
+    if (String(tontine.initiator) !== String(initiatorId)) {
+      return res.status(403).json({ msg: "Accès refusé. Seul l’initiateur peut remplacer un membre." });
+    }
+
+    // 🔎 Trouver les deux utilisateurs
+    const oldMember = await User.findOne({ phone: oldMemberPhone });
+    const newMember = await User.findOne({ phone: newMemberPhone });
+
+    if (!oldMember || !newMember) {
+      return res.status(404).json({ msg: "Utilisateur introuvable (ancien ou nouveau membre)." });
+    }
+
+    if (String(oldMember._id) === String(newMember._id)) {
+      return res.status(400).json({ msg: "Les deux membres sont identiques." });
+    }
+
+    // ⛔ Interdire si on essaie de remplacer l'initiateur
+    if (String(oldMember._id) === String(tontine.initiator)) {
+      return res.status(400).json({
+        msg: "❌ L’initiateur ne peut pas être remplacé.",
+      });
+    }
+
+    // ⛔ Interdire si le membre a déjà été bénéficiaire
+    const alreadyBeneficiary = tontine.beneficiaries.includes(oldMember._id);
+    if (alreadyBeneficiary) {
+      return res.status(400).json({
+        msg: "❌ Ce membre a déjà reçu sa part. Il ne peut pas être remplacé.",
+      });
+    }
+
+    // ⛔ Interdire si le membre a déjà cotisé
+    const hasPaid = await TontinePayment.exists({
+      tontine: tontineId,
+      user: oldMember._id,
+      hasPaid: true,
+    });
+    if (hasPaid) {
+      return res.status(400).json({
+        msg: "❌ Ce membre a déjà cotisé. Il ne peut pas être remplacé.",
+      });
+    }
+
+    // ⛔ Interdire si le nouveau membre est déjà dans la tontine
+    const alreadyIn = tontine.members.some((m) => String(m.user) === String(newMember._id));
+    if (alreadyIn) {
+      return res.status(400).json({ msg: "Le nouveau membre est déjà inscrit dans cette tontine." });
+    }
+
+    // ✅ Supprimer tous les paiements du membre sortant
+    await TontinePayment.deleteMany({ tontine: tontineId, user: oldMember._id });
+
+    // ✅ Supprimer du tableau des membres
+    tontine.members = tontine.members.filter((m) => String(m.user) !== String(oldMember._id));
+
+    // ✅ Ajouter le nouveau membre
+    tontine.members.push({ user: newMember._id, joinedAt: new Date() });
+    await tontine.save();
+
+    // ✅ Créer les paiements du nouveau membre
+   
+
+    const cycles = await TontineCycle.find({
+  tontine: tontineId,
+  cycleNumber: { $lte: tontine.totalCycles }, // ✅ protection importante
+});
+
+
+    const payments = cycles.map((cycle) => ({
+      tontine: tontineId,
+      user: newMember._id,
+      cycle: cycle._id,
+      amountPaid: 0,
+      hasPaid: false,
+      paymentDate: null,
+      paymentMethod: "compte_virtuel",
+    }));
+
+    await TontinePayment.insertMany(payments);
+
+    res.status(200).json({
+      msg: "✅ Remplacement effectué avec succès.",
+      oldMember: { name: oldMember.name, phone: oldMember.phone },
+      newMember: { name: newMember.name, phone: newMember.phone },
+    });
+  } catch (error) {
+    console.error("❌ Erreur lors du remplacement du membre :", error);
+    res.status(500).json({ msg: "Erreur serveur lors du remplacement." });
   }
 };

@@ -15,8 +15,6 @@ import CashMovement from "../models/CashMovement.js";
 
 
 
-
-
 // ✅ 1️⃣ Ouvrir une nouvelle caisse (uniquement pour les superviseurs)
 
 
@@ -121,6 +119,7 @@ await CashMovement.create({
 
 
 
+
 // export const closeCashRegister = async (req, res) => {
 //   try {
 //     const { closingAmount } = req.body;
@@ -132,7 +131,42 @@ await CashMovement.create({
 //       return res.status(400).json({ msg: "Caisse introuvable ou déjà fermée." });
 //     }
 
-//     // 2️⃣ Récupérer tous les mouvements liés à cette caisse
+//     // 2️⃣ Vérifier qu'il n'y a pas de transfert interville en attente
+//     // const pendingTransfers = await InterCityTransfer.findOne({
+//     //   cashRegister: cashRegister._id,
+//     //   status: "pending"
+//     // });
+    
+//     // if (pendingTransfers) {
+//     //   return res.status(400).json({
+//     //     msg: "❌ Impossible de fermer la caisse : au moins un transfert interville est encore en attente de traitement."
+//     //   });
+//     // }
+
+
+
+//     const pendingTransfers = await InterCityTransfer.find({
+//   cashRegister: cashRegister._id,
+//   status: "pending"
+// }).populate("destinationCity", "name"); // si tu veux afficher le nom de la ville
+
+// if (pendingTransfers.length > 0) {
+//   return res.status(400).json({
+//     msg: `❌ Impossible de fermer la caisse : ${pendingTransfers.length} transfert(s) interville en attente.`,
+//     pendingTransfers: pendingTransfers.map((tr) => ({
+//       _id: tr._id,
+//       amount: tr.amount,
+//       createdAt: tr.createdAt,
+//       destination: tr.destinationCity?.name || "—",
+//       beneficiary: tr.beneficiaryName || "—",
+//       phone: tr.beneficiaryPhone || "—",
+//     }))
+//   });
+// }
+
+    
+
+//     // 3️⃣ Récupérer les mouvements liés à la caisse
 //     const movements = await CashMovement.find({ cashRegister: cashRegister._id });
 
 //     const totalDeposits = movements
@@ -143,22 +177,20 @@ await CashMovement.create({
 //       .filter((m) => m.type === "withdrawal")
 //       .reduce((sum, m) => sum + m.amount, 0);
 
-//     // 3️⃣ Montant attendu
 //     const expectedClosingAmount = (cashRegister.openingAmount ?? 0) + totalDeposits - totalWithdrawals;
-
-//     // 4️⃣ Calcul de l'écart réel
 //     const discrepancy = closingAmount - expectedClosingAmount;
 
-//     // 5️⃣ Récupérer les transferts interville de la journée pour cette caisse
+//     // 4️⃣ Transferts interville du jour
 //     const todayStart = new Date();
 //     todayStart.setHours(0, 0, 0, 0);
 //     const todayEnd = new Date();
 //     todayEnd.setHours(23, 59, 59, 999);
 
 //     const interCityTransfers = await InterCityTransfer.find({
-//       cashier: cashRegister.cashier,
+//       createdBy: cashRegister.cashier,
 //       cashRegister: cashRegister._id,
 //       createdAt: { $gte: todayStart, $lte: todayEnd },
+//       status: "completed"
 //     });
 
 //     const totalInterCityAmount = interCityTransfers.reduce((sum, tr) => sum + (tr.amount || 0), 0);
@@ -167,15 +199,14 @@ await CashMovement.create({
 //       0
 //     );
 
-//     // 6️⃣ Mettre à jour la caisse
+//     // 5️⃣ Mise à jour de la caisse
 //     cashRegister.status = "closed";
 //     cashRegister.closingAmount = closingAmount;
 //     cashRegister.discrepancy = discrepancy;
 //     cashRegister.closedAt = new Date();
-
 //     await cashRegister.save();
 
-//     // 7️⃣ Créer le DailyCashierReport
+//     // 6️⃣ Rapport journalier
 //     await DailyCashierReport.create({
 //       cashier: cashRegister.cashier,
 //       cashRegister: cashRegister._id,
@@ -185,12 +216,12 @@ await CashMovement.create({
 //       totalDeposits,
 //       totalWithdrawals,
 //       totalInterCityTransfers: totalInterCityAmount,
-//       totalInterCityFees, // ✅ ajout
+//       totalInterCityFees,
 //       discrepancy,
 //       isClosed: true,
 //     });
 
-//     // 8️⃣ Créer le ClosingReport
+//     // 7️⃣ Rapport de fermeture
 //     await ClosingReport.create({
 //       cashRegister: cashRegister._id,
 //       supervisor: cashRegister.supervisor,
@@ -203,12 +234,12 @@ await CashMovement.create({
 //       discrepancy,
 //       closedAt: new Date(),
 //       registerNumber: cashRegister.registerNumber,
-//       totalInterCityFees, // ✅ ajout
-//       performedBy: req.user?._id, // ✅ trace de qui ferme
+//       totalInterCityFees,
+//       performedBy: req.user?._id,
 //     });
 
 //     res.status(200).json({
-//       msg: "Caisse fermée avec succès.",
+//       msg: "✅ Caisse fermée avec succès.",
 //       cashRegister,
 //       expectedClosingAmount,
 //       discrepancy,
@@ -220,37 +251,163 @@ await CashMovement.create({
 //   }
 // };
 
+
+
 export const closeCashRegister = async (req, res) => {
   try {
     const { closingAmount } = req.body;
     const { id } = req.params;
 
-    // 1️⃣ Vérifier que la caisse existe et est bien ouverte
+    console.log("🔍 Étape 1 : Vérification de la caisse ID :", id);
     const cashRegister = await CashRegister.findById(id);
-    if (!cashRegister || cashRegister.status !== "open") {
-      return res.status(400).json({ msg: "Caisse introuvable ou déjà fermée." });
+    if (!cashRegister) {
+      console.log("❌ Caisse introuvable.");
+      return res.status(400).json({ msg: "Caisse introuvable." });
+    }
+    if (cashRegister.status !== "open") {
+      console.log("❌ Caisse déjà fermée.");
+      return res.status(400).json({ msg: "Caisse déjà fermée." });
     }
 
-    // 2️⃣ Vérifier qu'il n'y a pas de transfert interville en attente
-    const pendingTransfers = await InterCityTransfer.findOne({
-      cashRegister: cashRegister._id,
-      status: "pending"
-    });
-    
-    if (pendingTransfers) {
-      return res.status(400).json({
-        msg: "❌ Impossible de fermer la caisse : au moins un transfert interville est encore en attente de traitement."
-      });
-    }
-    
+    console.log("✅ Caisse trouvée et ouverte.");
 
-    // 3️⃣ Récupérer les mouvements liés à la caisse
+    // Étape 2 : Vérifier les transferts en attente
+    // console.log("🔍 Vérification des transferts interville en attente...");
+    // const pendingTransfers = await InterCityTransfer.find({
+    //   cashRegister: cashRegister._id,
+    //   status: "pending",
+    // }).populate("destinationCity", "name");
+
+    // if (pendingTransfers.length > 0) {
+    //   console.log(`🚫 ${pendingTransfers.length} transfert(s) interville en attente. Clôture interdite.`);
+    //   return res.status(400).json({
+    //     msg: `❌ Impossible de fermer la caisse : ${pendingTransfers.length} transfert(s) interville en attente.`,
+    //     pendingTransfers: pendingTransfers.map((tr) => ({
+    //       _id: tr._id,
+    //       amount: tr.amount,
+    //       createdAt: tr.createdAt,
+    //       destination: tr.destinationCity?.name || "—",
+    //       beneficiary: tr.beneficiaryName || "—",
+    //       phone: tr.beneficiaryPhone || "—",
+    //     })),
+    //   });
+    // }
+
+
+// // Étape 2 : Vérifier les transferts interville en attente dans les villes du superviseur
+// console.log("🔍 Étape 2 : Vérification des transferts en attente selon la ville du superviseur...");
+
+// // 🔹 Récupérer le superviseur avec sa ville
+// const supervisor = await User.findById(cashRegister.supervisor).select("city name").populate("city", "name");
+
+// if (!supervisor || !supervisor.city) {
+//   console.log("❌ Superviseur introuvable ou non rattaché à une ville.");
+//   return res.status(400).json({ msg: "Superviseur sans ville rattachée. Impossible de vérifier les transferts." });
+// }
+
+// const cityId = supervisor.city._id.toString();
+// console.log(`🏙️ Ville du superviseur : ${supervisor.city.name} (${cityId})`);
+
+// // 🔍 Rechercher les transferts en attente liés à cette ville (comme origine OU destination)
+// const pendingTransfers = await InterCityTransfer.find({
+//   status: "pending",
+//   $or: [
+//     { senderCity: cityId },
+//     { receiverCity: cityId },
+//   ]
+// }).populate("receiverCity senderCity", "name");
+
+// console.log(`🔢 ${pendingTransfers.length} transfert(s) en attente liés à la ville du superviseur.`);
+
+// if (pendingTransfers.length > 0) {
+//   console.log("⛔ Clôture interdite : des transferts en attente concernent cette ville.");
+
+//  return res.status(400).json({
+//   msg: `❌ Impossible de fermer la caisse : ${pendingTransfers.length} transfert(s) interville en attente dans votre ville (émission ou réception).`,
+//   pendingTransfers: pendingTransfers.map((tr) => ({
+//     _id: tr._id,
+//     amount: tr.amount,
+//     createdAt: tr.createdAt,
+//     senderFirstName: tr.senderFirstName,
+//     senderLastName: tr.senderLastName,
+//     senderPhone: tr.senderPhone,
+//     senderCity: tr.senderCity?.name || "—",
+//     receiverName: tr.receiverName,
+//     receiverPhone: tr.receiverPhone,
+//     receiverCity: tr.receiverCity?.name || "—",
+//     cashRegister: tr.cashRegister,
+//     status: tr.status,
+//     secretCode: tr.secretCode,
+//     isMobileTransfer: tr.isMobileTransfer,
+//     refunded: tr.refunded,
+//   })),
+// });
+
+// }
+
+// console.log("✅ Aucun transfert bloquant trouvé. Clôture autorisée.");
+
+
+
+
+
+
+// Étape 2 : Vérifier les transferts interville en attente liés à la ville du superviseur
+console.log("🔍 Étape 2 : Vérification des transferts interville liés à la ville du superviseur");
+
+const supervisor = await User.findById(cashRegister.supervisor).select("city name").populate("city", "name");
+
+if (!supervisor || !supervisor.city) {
+  console.log("❌ Superviseur introuvable ou non rattaché à une ville.");
+  return res.status(400).json({ msg: "Superviseur sans ville rattachée. Impossible de vérifier les transferts." });
+}
+
+const cityId = supervisor.city._id.toString();
+console.log(`🏙️ Ville du superviseur : ${supervisor.city.name} (${cityId})`);
+
+// Rechercher tous les transferts pending (même ceux sans senderCity)
+const pendingTransfers = await InterCityTransfer.find({
+  status: "pending",
+  $or: [
+    { senderCity: cityId },
+    { receiverCity: cityId }
+  ]
+}).populate("senderCity receiverCity", "name");
+
+console.log(`🔢 ${pendingTransfers.length} transfert(s) en attente trouvés dans la ville du superviseur.`);
+
+if (pendingTransfers.length > 0) {
+  console.log("⛔ Clôture refusée. Transferts en attente dans cette ville.");
+
+  return res.status(400).json({
+    msg: `❌ Impossible de fermer la caisse : ${pendingTransfers.length} transfert(s) interville en attente dans votre ville.`,
+    pendingTransfers: pendingTransfers.map((tr) => ({
+      _id: tr._id,
+      amount: tr.amount,
+      createdAt: tr.createdAt,
+      senderFirstName: tr.senderFirstName,
+      senderLastName: tr.senderLastName,
+      senderPhone: tr.senderPhone,
+      senderCity: tr.senderCity?.name || "—",
+      receiverName: tr.receiverName,
+      receiverPhone: tr.receiverPhone,
+      receiverCity: tr.receiverCity?.name || "—",
+      isMobileTransfer: tr.isMobileTransfer,
+      refunded: tr.refunded,
+      status: tr.status
+    })),
+  });
+}
+
+console.log("✅ Aucun transfert bloquant détecté. Poursuite de la fermeture.");
+
+    // Étape 3 : Récupération des mouvements
+    console.log("🔍 Récupération des mouvements liés à la caisse...");
     const movements = await CashMovement.find({ cashRegister: cashRegister._id });
 
     const totalDeposits = movements
       .filter((m) => m.type === "deposit" && m.note !== "Ouverture de caisse")
       .reduce((sum, m) => sum + m.amount, 0);
-
     const totalWithdrawals = movements
       .filter((m) => m.type === "withdrawal")
       .reduce((sum, m) => sum + m.amount, 0);
@@ -258,7 +415,12 @@ export const closeCashRegister = async (req, res) => {
     const expectedClosingAmount = (cashRegister.openingAmount ?? 0) + totalDeposits - totalWithdrawals;
     const discrepancy = closingAmount - expectedClosingAmount;
 
-    // 4️⃣ Transferts interville du jour
+    console.log("💰 Total dépôts :", totalDeposits);
+    console.log("💸 Total retraits :", totalWithdrawals);
+    console.log("📊 Montant attendu :", expectedClosingAmount);
+    console.log("⚠️ Écart de caisse :", discrepancy);
+
+    // Étape 4 : Calcul des transferts du jour
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date();
@@ -268,7 +430,7 @@ export const closeCashRegister = async (req, res) => {
       createdBy: cashRegister.cashier,
       cashRegister: cashRegister._id,
       createdAt: { $gte: todayStart, $lte: todayEnd },
-      status: "completed"
+      status: "completed",
     });
 
     const totalInterCityAmount = interCityTransfers.reduce((sum, tr) => sum + (tr.amount || 0), 0);
@@ -277,14 +439,19 @@ export const closeCashRegister = async (req, res) => {
       0
     );
 
-    // 5️⃣ Mise à jour de la caisse
+    console.log("🚚 Total transferts interville du jour :", totalInterCityAmount);
+    console.log("🧾 Total frais des transferts :", totalInterCityFees);
+
+    // Étape 5 : Clôture de la caisse
+    console.log("🔒 Clôture de la caisse en cours...");
     cashRegister.status = "closed";
     cashRegister.closingAmount = closingAmount;
     cashRegister.discrepancy = discrepancy;
     cashRegister.closedAt = new Date();
     await cashRegister.save();
+    console.log("✅ Caisse fermée et sauvegardée.");
 
-    // 6️⃣ Rapport journalier
+    // Étape 6 : Rapport journalier
     await DailyCashierReport.create({
       cashier: cashRegister.cashier,
       cashRegister: cashRegister._id,
@@ -298,8 +465,9 @@ export const closeCashRegister = async (req, res) => {
       discrepancy,
       isClosed: true,
     });
+    console.log("📄 Rapport journalier enregistré.");
 
-    // 7️⃣ Rapport de fermeture
+    // Étape 7 : Rapport de fermeture
     await ClosingReport.create({
       cashRegister: cashRegister._id,
       supervisor: cashRegister.supervisor,
@@ -315,6 +483,7 @@ export const closeCashRegister = async (req, res) => {
       totalInterCityFees,
       performedBy: req.user?._id,
     });
+    console.log("📘 Rapport de fermeture enregistré.");
 
     res.status(200).json({
       msg: "✅ Caisse fermée avec succès.",
@@ -328,6 +497,7 @@ export const closeCashRegister = async (req, res) => {
     res.status(500).json({ msg: "Erreur du serveur." });
   }
 };
+
 
 
 
@@ -492,102 +662,6 @@ export const withdrawFunds = async (req, res) => {
 
 
 
-// export const getCashRegisterTransactions = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-//     const { page = 1, limit = 10 } = req.query;
-
-//     console.log(`📌 Récupération des transactions pour la caisse : ${id} | Page : ${page}`);
-
-//     // Vérifie d'abord que la caisse existe
-//     const cashRegister = await CashRegister.findById(id).populate("cashier", "name phone");
-//     if (!cashRegister) {
-//       return res.status(404).json({ msg: "Caisse introuvable." });
-//     }
-
-//     // Requête paginée sur CashMovement pour cette caisse
-//     const totalTransactions = await CashMovement.countDocuments({ cashRegister: id });
-//     const transactions = await CashMovement.find({ cashRegister: id })
-//       .populate("performedBy", "name")
-//       .sort({ date: -1 }) // Du plus récent au plus ancien
-//       .skip((page - 1) * limit)
-//       .limit(Number(limit));
-
-//     console.log(`✅ Transactions retournées : ${transactions.length}/${totalTransactions}`);
-
-//     res.status(200).json({
-//       cashRegister,
-//       transactions,
-//       totalTransactions,
-//       totalPages: Math.ceil(totalTransactions / limit),
-//       currentPage: parseInt(page),
-//     });
-//   } catch (error) {
-//     console.error("❌ Erreur lors de la récupération des transactions :", error);
-//     res.status(500).json({ msg: "Erreur du serveur." });
-//   }
-// };
-
-
-// export const getCashRegisterReporting = async (req, res) => {
-//   try {
-//     const supervisorId = req.user._id;
-
-//     const cashRegisters = await CashRegister.find({ supervisor: supervisorId })
-//       .populate("cashier", "name phone city")
-//       .populate("supervisor", "name")
-//       .sort({ openedAt: -1 });
-
-//     // Pour chaque caisse, on va chercher les mouvements (deposits et withdrawals)
-//     const report = await Promise.all(
-//       cashRegisters.map(async (register) => {
-//         // Récupérer tous les mouvements liés à cette caisse
-//         const movements = await CashMovement.find({ cashRegister: register._id });
-
-//         // Total des dépôts
-//         const deposits = movements
-//           .filter((t) => t.type === "deposit")
-//           .reduce((sum, t) => sum + t.amount, 0);
-
-//         // Total des retraits
-//         const withdrawals = movements
-//           .filter((t) => t.type === "withdrawal")
-//           .reduce((sum, t) => sum + t.amount, 0);
-
-//         const theoreticalBalance = register.openingAmount + deposits - withdrawals;
-
-//         const discrepancy =
-//           register.status === "closed"
-//             ? register.closingAmount - theoreticalBalance
-//             : 0;
-
-//         return {
-//           registerNumber: register.registerNumber,
-//           status: register.status,
-//           openedAt: register.openedAt,
-//           closedAt: register.closedAt,
-//           city: register.cashier?.city?.name || "—",
-//           cashier: {
-//             name: register.cashier?.name || "—",
-//             phone: register.cashier?.phone || "—",
-//           },
-//           openingAmount: register.openingAmount,
-//           closingAmount: register.closingAmount,
-//           totalDeposits: deposits,
-//           totalWithdrawals: withdrawals,
-//           theoreticalBalance,
-//           discrepancy,
-//         };
-//       })
-//     );
-
-//     return res.status(200).json(report);
-//   } catch (error) {
-//     console.error("❌ Erreur reporting des caisses :", error);
-//     res.status(500).json({ msg: "Erreur du serveur" });
-//   }
-// };
-
 
 export const getCashRegisterTransactions = async (req, res) => {
   try {
@@ -642,43 +716,7 @@ export const getCashRegisterTransactions = async (req, res) => {
 
 
 
-// export const getCashRegisterReporting = async (req, res) => {
-//   try {
-//     const { startDate, endDate } = req.query;
-//     const supervisorId = req.user.id;
 
-//     // Recherche des caisses liées à ce superviseur
-//     const query = { supervisor: supervisorId };
-
-//     if (startDate || endDate) {
-//       query.openedAt = {};
-//       if (startDate) query.openedAt.$gte = new Date(startDate);
-//       if (endDate) query.openedAt.$lte = new Date(endDate);
-//     }
-
-//     const cashRegisters = await CashRegister.find(query)
-//       .populate("cashier", "name phone")
-//       .lean();
-
-//     const reportData = cashRegisters.map((reg) => ({
-//       registerNumber: reg.registerNumber,
-//       cashier: reg.cashier,
-//       city: reg.city,
-//       openingAmount: reg.openingAmount || 0,
-//       totalDeposits: reg.totalDeposits || 0,
-//       totalWithdrawals: reg.totalWithdrawals || 0,
-//       closingAmount: reg.closingAmount || 0,
-//       theoreticalBalance: (reg.openingAmount || 0) + (reg.totalDeposits || 0) - (reg.totalWithdrawals || 0),
-//       discrepancy: reg.discrepancy || 0,
-//       status: reg.status,
-//     }));
-
-//     res.json(reportData);
-//   } catch (error) {
-//     console.error("❌ Erreur reporting caisse :", error);
-//     res.status(500).json({ msg: "Erreur serveur lors du reporting" });
-//   }
-// };
 
 
 export const getCashRegisterReporting = async (req, res) => {

@@ -88,12 +88,27 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, unique: true, sparse: true },
   phone: { type: String, unique: true, required: true },
   password: { type: String, required: true },
-  pin: { type: String, required: true }, // 🔹 PIN pour les transactions
-  role: { 
-    type: String, 
-    enum: ["user", "admin", "supervisor", "cashier"], 
-    required: true 
+  // pin: { type: String, required: true }, // 🔹 PIN pour les transactions
+  // role: { 
+  //   type: String, 
+  //   enum: ["user", "admin", "supervisor", "cashier"], 
+  //   required: true 
+  // },
+
+  pin: {
+  type: String,
+  required: function () {
+    return this.role === "user" || this.role === "cashier";
   },
+},
+
+
+  role: {
+  type: String,
+  enum: ["user", "admin", "supervisor", "cashier", "agent"], // ✅ ajouté agent
+  required: true,
+},
+
   virtualAccount: {
     balance: { type: Number, default: 0 },
     currency: { type: String, default: "XOF" },
@@ -104,6 +119,8 @@ const UserSchema = new mongoose.Schema({
   isLocked: { type: Boolean, default: false }, // 🔹 Compte verrouillé après trop d’échecs
   isActive: { type: Boolean, default: true }, // 🔹 Pour désactiver un compte en cas de problème
   isActivated: { type: Boolean, default: true }, // 🔹 Pour gérer l’activation des caissiers
+  isVerified: { type: Boolean, default: false }, // 🔹 Activé seulement après confirmation OTP
+
   // createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // 🔹 Qui a créé cet utilisateur ?
   lastActivity: { type: Date, default: Date.now }, // ✅ Suivi de l'activité
   supervisor: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

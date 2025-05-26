@@ -12,6 +12,7 @@ import {
   getCashRegisterTransactions,
   getCashRegisterReporting,
 } from "../controllers/cashRegisterController.js";
+import InterCityTransfer from "../models/InterCityTransfer.js"; // ou le chemin correct
 
 const router = express.Router();
 
@@ -37,6 +38,8 @@ router.put("/reopen/:id", authenticateUser, authorizeRoles("supervisor"), reopen
 router.get("/", authenticateUser, authorizeRoles("supervisor"), getCashRegisters);
 
 router.get("/reporting", authenticateUser, authorizeRoles("supervisor"), getCashRegisterReporting);
+
+
 
 
 

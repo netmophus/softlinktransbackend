@@ -8,6 +8,8 @@ import { sendSMS } from "../services/smsService.js";
 import { calculateFees } from "../utils/feeCalculator.js"; // Assure-toi que cette fonction est bien définie
 import CashRegister from "../models/CashRegister.js";
 import CashMovement from "../models/CashMovement.js";
+import CommissionHistory from "../models/CommissionHistory.js";
+import InternalSettlement from "../models/InternalSettlement.js";
 
 
 // ✅ Générer un code unique
@@ -73,6 +75,10 @@ export const refundInterCityTransfer = async (req, res) => {
 
 
 
+
+
+
+
 // export const createInterCityTransfer = async (req, res) => {
 //   try {
 //     console.log("📩 Requête reçue :", req.body);
@@ -91,27 +97,23 @@ export const refundInterCityTransfer = async (req, res) => {
 
 //     // 1️⃣ Vérification des champs obligatoires
 //     if (!senderFirstName || !senderLastName || !senderPhone || !receiverName || !receiverPhone || !receiverCity || !amount) {
-//       console.error("❌ Erreur : Tous les champs sont requis.");
 //       return res.status(400).json({ msg: "Tous les champs sont requis." });
 //     }
 
 //     // 2️⃣ Conversion et validation du montant
 //     amount = parseFloat(amount);
 //     if (isNaN(amount) || amount <= 0) {
-//       console.error("❌ Erreur : Montant invalide :", amount);
 //       return res.status(400).json({ msg: "Montant invalide. Veuillez entrer un nombre valide." });
 //     }
 
 //     // 3️⃣ Vérification de l'utilisateur initiateur
 //     const sender = await User.findOne({ phone: senderPhone });
 //     if (!sender) {
-//       console.error("❌ Erreur : Utilisateur initiateur introuvable.");
 //       return res.status(404).json({ msg: "Utilisateur initiateur introuvable." });
 //     }
 
 //     // 4️⃣ Vérification du compte virtuel
 //     if (!sender.virtualAccount || typeof sender.virtualAccount.balance !== "number") {
-//       console.error("❌ Erreur : Compte virtuel non configuré pour l'utilisateur.");
 //       return res.status(400).json({ msg: "Compte virtuel non configuré." });
 //     }
 
@@ -120,7 +122,6 @@ export const refundInterCityTransfer = async (req, res) => {
 //     // 5️⃣ Vérification de la ville de retrait
 //     const receiverCityExists = await City.findById(receiverCity);
 //     if (!receiverCityExists) {
-//       console.error("❌ Erreur : Ville de retrait introuvable.");
 //       return res.status(400).json({ msg: "Ville de retrait invalide." });
 //     }
 
@@ -135,7 +136,6 @@ export const refundInterCityTransfer = async (req, res) => {
 //     }
 
 //     if (finalAmount <= 0) {
-//       console.error("❌ Erreur : Le montant après déduction des frais est invalide.");
 //       return res.status(400).json({ msg: "Le montant après déduction des frais est invalide." });
 //     }
 
@@ -144,20 +144,40 @@ export const refundInterCityTransfer = async (req, res) => {
 
 //     // 7️⃣ Vérification du solde suffisant
 //     if (sender.virtualAccount.balance < totalCost) {
-//       console.error("❌ Erreur : Fonds insuffisants. Solde actuel :", sender.virtualAccount.balance);
 //       return res.status(400).json({ msg: "Fonds insuffisants dans le compte virtuel." });
 //     }
 
-//     // 8️⃣ Débiter le compte virtuel de l'expéditeur
+//     // 8️⃣ Trouver la caisse (via ville de retrait, puisque l'utilisateur est mobile)
+//     const senderSupervisor = await User.findOne({ role: "supervisor", city: receiverCity });
+//     if (!senderSupervisor) {
+//       return res.status(400).json({ msg: "Aucun superviseur trouvé pour la ville de l’expéditeur (retrait)." });
+//     }
+
+//     const senderCashRegister = await CashRegister.findOne({
+//       supervisor: senderSupervisor._id,
+//       status: "open"
+//     }).populate('supervisor');
+
+//     if (!senderCashRegister) {
+//       return res.status(400).json({ msg: "Aucune caisse ouverte trouvée pour cette ville." });
+//     }
+
+//     if (!senderCity) {
+//       senderCity = senderCashRegister.supervisor?.city?.toString();
+//       console.log("🔄 Ville de l’expéditeur définie automatiquement :", senderCity);
+//     }
+
+//     // 9️⃣ Débiter le compte virtuel
 //     sender.virtualAccount.balance -= totalCost;
 //     await sender.save();
+
 //     console.log(`✅ Nouveau solde de ${sender.name} : ${sender.virtualAccount.balance} XOF`);
 
-//     // 9️⃣ Génération du code secret
+//     // 🔟 Génération du code secret
 //     const secretCode = await generateSecretCode();
 //     console.log(`🔑 Code Secret Généré: ${secretCode}`);
 
-//     // 🔟 Création du transfert en base de données
+//     // 🔟 Enregistrement du transfert
 //     const newTransfer = new InterCityTransfer({
 //       senderFirstName,
 //       senderLastName,
@@ -173,39 +193,21 @@ export const refundInterCityTransfer = async (req, res) => {
 //       secretCode,
 //       status: "pending",
 //       createdBy: sender._id,
-//        cashRegister: senderCashRegister._id // ✅ Enregistrement de la caisse liée
+//       cashRegister: senderCashRegister._id
 //     });
 
 //     await newTransfer.save();
 //     console.log("✅ Transfert enregistré en base de données avec succès.");
 
-//     // 1️⃣1️⃣ IMPACT CAISSE PHYSIQUE DE LA VILLE DE RECEPTION
-
-//     // Trouver le superviseur de la ville de réception
-//     const receiverSupervisor = await User.findOne({ role: "supervisor", city: receiverCity });
-//     if (!receiverSupervisor) {
-//       console.error("❌ Erreur : Aucun superviseur trouvé pour la ville de réception.");
-//       return res.status(400).json({ msg: "Aucun superviseur trouvé pour la ville de réception." });
-//     }
-
-//     // Trouver la caisse ouverte dans la ville de réception
-//     const receiverCashRegister = await CashRegister.findOne({ supervisor: receiverSupervisor._id, status: "open" });
-//     if (!receiverCashRegister) {
-//       console.error("❌ Erreur : Aucune caisse ouverte pour la ville de réception.");
-//       return res.status(400).json({ msg: "Aucune caisse ouverte pour la ville de réception." });
-//     }
-
-//     // Créditer la caisse de la ville de retrait
-//     //receiverCashRegister.currentBalance += finalAmount;
+//     // 1️⃣1️⃣ Crédit de la caisse physique de la ville de retrait
+//     const receiverCashRegister = senderCashRegister; // même caisse (ville de retrait)
 //     receiverCashRegister.currentBalance += totalCost;
 
-//     // Créer le mouvement CashMovement (trace réseau)
 //     await CashMovement.create({
 //       cashRegister: receiverCashRegister._id,
 //       type: "deposit",
-//      // amount: finalAmount,
 //       amount: totalCost,
-//       performedBy: sender._id, // On peut utiliser un user système ou le sender
+//       performedBy: sender._id,
 //       date: new Date(),
 //       note: `Crédit interville mobile (Transfert de ${senderFirstName} ${senderLastName} pour ${receiverName}) — Code: ${secretCode}`,
 //       clientFirstName: receiverName,
@@ -214,20 +216,19 @@ export const refundInterCityTransfer = async (req, res) => {
 //       operationType: "intercity_receive",
 //     });
 
-//     // Sauvegarder la caisse
 //     await receiverCashRegister.save();
 
-//     // 1️⃣2️⃣ Envoi des notifications SMS
+//     // 1️⃣2️⃣ Notifications
 //     await sendSMS(senderPhone, `Votre transfert interville est validé.\nMontant: ${finalAmount} XOF\nCode Secret: ${secretCode}.`);
 //     await sendSMS(receiverPhone, `Vous avez reçu un transfert interville.\nMontant: ${finalAmount} XOF\nCode Secret: ${secretCode}.`);
 //     console.log("📩 SMS envoyés aux parties concernées.");
 
-//     // 1️⃣3️⃣ Réponse avec le nouveau solde et le code secret
+//     // 1️⃣3️⃣ Réponse
 //     res.status(201).json({
 //       msg: "Transfert effectué avec succès.",
 //       secretCode,
 //       totalCost,
-//       newBalance: sender.virtualAccount.balance // Retour du nouveau solde du compte virtuel
+//       newBalance: sender.virtualAccount.balance
 //     });
 
 //   } catch (error) {
@@ -238,67 +239,45 @@ export const refundInterCityTransfer = async (req, res) => {
 
 
 
-
-
-
-
-
-
-// annulation de transfert interville d'un user mobile
-
-
-
-
-
-
-
 export const createInterCityTransfer = async (req, res) => {
   try {
     console.log("📩 Requête reçue :", req.body);
 
-    let { 
-      senderFirstName, 
-      senderLastName, 
-      senderPhone, 
-      senderCity, 
-      receiverName, 
-      receiverPhone, 
-      receiverCity, 
-      amount, 
-      deductFeesFromAmount 
+    let {
+      senderFirstName,
+      senderLastName,
+      senderPhone,
+      senderCity,
+      receiverName,
+      receiverPhone,
+      receiverCity,
+      amount,
+      deductFeesFromAmount
     } = req.body;
 
-    // 1️⃣ Vérification des champs obligatoires
     if (!senderFirstName || !senderLastName || !senderPhone || !receiverName || !receiverPhone || !receiverCity || !amount) {
       return res.status(400).json({ msg: "Tous les champs sont requis." });
     }
 
-    // 2️⃣ Conversion et validation du montant
     amount = parseFloat(amount);
     if (isNaN(amount) || amount <= 0) {
       return res.status(400).json({ msg: "Montant invalide. Veuillez entrer un nombre valide." });
     }
 
-    // 3️⃣ Vérification de l'utilisateur initiateur
     const sender = await User.findOne({ phone: senderPhone });
     if (!sender) {
       return res.status(404).json({ msg: "Utilisateur initiateur introuvable." });
     }
 
-    // 4️⃣ Vérification du compte virtuel
     if (!sender.virtualAccount || typeof sender.virtualAccount.balance !== "number") {
       return res.status(400).json({ msg: "Compte virtuel non configuré." });
     }
 
-    console.log(`✅ Solde initial de ${sender.name} : ${sender.virtualAccount.balance} XOF`);
-
-    // 5️⃣ Vérification de la ville de retrait
     const receiverCityExists = await City.findById(receiverCity);
     if (!receiverCityExists) {
       return res.status(400).json({ msg: "Ville de retrait invalide." });
     }
 
-    // 6️⃣ Calcul des frais
     const { commission, tax } = calculateFees(amount);
     let finalAmount = amount;
     let totalCost = amount + commission + tax;
@@ -312,18 +291,13 @@ export const createInterCityTransfer = async (req, res) => {
       return res.status(400).json({ msg: "Le montant après déduction des frais est invalide." });
     }
 
-    console.log(`✅ [FEE CALCULATOR] Montant: ${amount} | Commission: ${commission} | Taxe: ${tax}`);
-    console.log(`💰 Final Amount: ${finalAmount} | Total Cost: ${totalCost}`);
-
-    // 7️⃣ Vérification du solde suffisant
     if (sender.virtualAccount.balance < totalCost) {
       return res.status(400).json({ msg: "Fonds insuffisants dans le compte virtuel." });
     }
 
-    // 8️⃣ Trouver la caisse (via ville de retrait, puisque l'utilisateur est mobile)
     const senderSupervisor = await User.findOne({ role: "supervisor", city: receiverCity });
     if (!senderSupervisor) {
-      return res.status(400).json({ msg: "Aucun superviseur trouvé pour la ville de l’expéditeur (retrait)." });
+      return res.status(400).json({ msg: "Aucun superviseur trouvé pour la ville de retrait." });
     }
 
     const senderCashRegister = await CashRegister.findOne({
@@ -337,20 +311,13 @@ export const createInterCityTransfer = async (req, res) => {
 
     if (!senderCity) {
       senderCity = senderCashRegister.supervisor?.city?.toString();
-      console.log("🔄 Ville de l’expéditeur définie automatiquement :", senderCity);
     }
 
-    // 9️⃣ Débiter le compte virtuel
     sender.virtualAccount.balance -= totalCost;
     await sender.save();
 
-    console.log(`✅ Nouveau solde de ${sender.name} : ${sender.virtualAccount.balance} XOF`);
-
-    // 🔟 Génération du code secret
     const secretCode = await generateSecretCode();
-    console.log(`🔑 Code Secret Généré: ${secretCode}`);
 
-    // 🔟 Enregistrement du transfert
     const newTransfer = new InterCityTransfer({
       senderFirstName,
       senderLastName,
@@ -366,18 +333,17 @@ export const createInterCityTransfer = async (req, res) => {
       secretCode,
       status: "pending",
       createdBy: sender._id,
+      isMobileTransfer: true,
       cashRegister: senderCashRegister._id
     });
 
     await newTransfer.save();
-    console.log("✅ Transfert enregistré en base de données avec succès.");
 
-    // 1️⃣1️⃣ Crédit de la caisse physique de la ville de retrait
-    const receiverCashRegister = senderCashRegister; // même caisse (ville de retrait)
-    receiverCashRegister.currentBalance += totalCost;
+    senderCashRegister.currentBalance += totalCost;
+    await senderCashRegister.save();
 
     await CashMovement.create({
-      cashRegister: receiverCashRegister._id,
+      cashRegister: senderCashRegister._id,
       type: "deposit",
       amount: totalCost,
       performedBy: sender._id,
@@ -386,17 +352,32 @@ export const createInterCityTransfer = async (req, res) => {
       clientFirstName: receiverName,
       clientPhone: receiverPhone,
       reference: newTransfer._id,
-      operationType: "intercity_receive",
+      operationType: "intercity_receive"
     });
 
-    await receiverCashRegister.save();
+    await CommissionHistory.create({
+      transactionType: "intercity",
+      referenceId: newTransfer._id,
+      referenceModel: "InterCityTransfer",
+      user: sender._id,
+      city: senderCity,
+      amount,
+      commission,
+      tax,
+      description: `Commission générée pour transfert interville mobile.`
+    });
 
-    // 1️⃣2️⃣ Notifications
+    // await InternalSettlement.create({
+    //   interCityTransfer: newTransfer._id,
+    //   fromCashRegister: null, // aucun guichet d'envoi car c’est mobile
+    //   toCashRegister: senderCashRegister._id,
+    //   amount: finalAmount,
+    //   status: "pending"
+    // });
+
     await sendSMS(senderPhone, `Votre transfert interville est validé.\nMontant: ${finalAmount} XOF\nCode Secret: ${secretCode}.`);
     await sendSMS(receiverPhone, `Vous avez reçu un transfert interville.\nMontant: ${finalAmount} XOF\nCode Secret: ${secretCode}.`);
-    console.log("📩 SMS envoyés aux parties concernées.");
 
-    // 1️⃣3️⃣ Réponse
     res.status(201).json({
       msg: "Transfert effectué avec succès.",
       secretCode,
@@ -405,13 +386,10 @@ export const createInterCityTransfer = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("❌ Erreur lors du transfert interville :", error.message, error.stack);
+    console.error("❌ Erreur lors du transfert interville :", error);
     res.status(500).json({ msg: "Erreur du serveur." });
   }
 };
-
-
-
 
 
 
@@ -487,93 +465,6 @@ export const cancelInterCityTransfer = async (req, res) => {
 
 //Modification de la ville de retrait
 
-
-
-// export const updateInterCityTransfer = async (req, res) => {
-//   try {
-//     const { transferId } = req.params;
-//     const { receiverCity, receiverName, receiverPhone, amount } = req.body;
-
-//     const transfer = await InterCityTransfer.findById(transferId);
-//     if (!transfer) return res.status(404).json({ msg: "Transfert introuvable." });
-//     if (transfer.status !== "pending") return res.status(400).json({ msg: "Transfert déjà traité ou annulé." });
-
-//     const oldReceiverCity = transfer.receiverCity.toString();
-//     const newReceiverCity = receiverCity;
-//     const amountChanged = transfer.amount !== amount;
-
-//     // ⚠️ Calculer l'écart d'ajustement si le montant change
-//     const adjustmentDelta = amount - transfer.amount;
-
-//     // 💰 Si la ville change, on gère les impacts sur les caisses
-//     if (oldReceiverCity !== newReceiverCity) {
-//       const oldSupervisor = await User.findOne({ role: "supervisor", city: oldReceiverCity });
-//       const oldCashRegister = await CashRegister.findOne({ supervisor: oldSupervisor._id, status: "open" });
-//       if (!oldCashRegister) return res.status(400).json({ msg: "Ancienne caisse non trouvée." });
-
-//       oldCashRegister.currentBalance -= transfer.amount;
-//       await oldCashRegister.save();
-
-//       await CashMovement.create({
-//         cashRegister: oldCashRegister._id,
-//         type: "withdrawal",
-//         amount: transfer.amount,
-//         performedBy: req.user._id,
-//         date: new Date(),
-//         note: `Correction : changement de ville retrait (code: ${transfer.secretCode})`,
-//         clientFirstName: transfer.receiverName,
-//         clientPhone: transfer.receiverPhone,
-//         reference: transfer._id,
-//         operationType: "intercity_citychange",
-//       });
-
-//       const newSupervisor = await User.findOne({ role: "supervisor", city: newReceiverCity });
-//       const newCashRegister = await CashRegister.findOne({ supervisor: newSupervisor._id, status: "open" });
-//       if (!newCashRegister) return res.status(400).json({ msg: "Nouvelle caisse non trouvée." });
-
-//       newCashRegister.currentBalance += amount;
-//       await newCashRegister.save();
-
-//       await CashMovement.create({
-//         cashRegister: newCashRegister._id,
-//         type: "deposit",
-//         amount: amount,
-//         performedBy: req.user._id,
-//         date: new Date(),
-//         note: `Correction : crédit ville changement (code: ${transfer.secretCode})`,
-//         clientFirstName: receiverName,
-//         clientPhone: receiverPhone,
-//         reference: transfer._id,
-//         operationType: "intercity_citychange",
-//       });
-
-//       transfer.receiverCity = receiverCity;
-//     }
-
-//     // ✅ Mise à jour du transfert
-//     transfer.receiverName = receiverName;
-//     transfer.receiverPhone = receiverPhone;
-//     transfer.amount = amount;
-//     await transfer.save();
-
-//     // ✅ Mettre à jour les mouvements "intercity_citychange" liés à ce transfert
-//     await CashMovement.updateMany(
-//       { reference: transfer._id, operationType: "intercity_citychange" },
-//       {
-//         $set: {
-//           amount: amount,
-//           clientFirstName: receiverName,
-//           clientPhone: receiverPhone,
-//         },
-//       }
-//     );
-
-//     res.json({ msg: "Transfert modifié et mouvements mis à jour avec succès.", transfer });
-//   } catch (err) {
-//     console.error("❌ Erreur modification transfert interville:", err);
-//     res.status(500).json({ msg: "Erreur serveur." });
-//   }
-// };
 
 
 

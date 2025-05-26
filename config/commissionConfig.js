@@ -10,7 +10,7 @@ export const COMMISSION_RULES = [
     { min: 1000001, max: 2000000, commission: 16000 },
   ];
   
-  export const TAX_RATE = 0.19; // 🔹 Taxe de 19% appliquée à la commission
+  export const TAX_RATE = 0.10; // 🔹 Taxe de 19% appliquée à la commission
   
   // ✅ Activation/Désactivation globale
   export const APPLY_COMMISSIONS_AND_TAXES = true; // Mettre `false` pour les désactiver
