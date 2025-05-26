@@ -12,13 +12,22 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 
 
 // Initialisation Firebase Admin (au début du fichier)
+
+
+
+
+
+// Initialisation Firebase Admin avec la config de la variable d'environnement
 if (!admin.apps.length) {
- const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG.replace(/\\n/g, '\n'));
+  const serviceAccount = JSON.parse(
+    process.env.FIREBASE_CONFIG.replace(/\\n/g, '\n')
+  );
 
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
 }
+
 
 
 const db = getFirestore();
