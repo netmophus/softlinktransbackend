@@ -3,4 +3,4 @@ node_modules/
 receipts/
 # Ignorer les fichiers Firebase
 firebase/firebaseServiceAccount.json
-firebase/
+

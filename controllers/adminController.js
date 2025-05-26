@@ -2,43 +2,33 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import { generateOTP } from "../services/otpService.js";
 import { sendSMS } from "../services/smsService.js";
-import City from "../models/City.js"; 
+import City from "../models/City.js";
 import ActivityLog from "../models/ActivityLog.js";
 import InternalSettlement from "../models/InternalSettlement.js";
 import CashRegister from "../models/CashRegister.js";
 import CashMovement from "../models/CashMovement.js";
-
-
-
-
 import admin from "firebase-admin";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import fs from "fs";
-import path from "path";
 
 
+// Initialisation Firebase Admin (au début du fichier)
+if (!admin.apps.length) {
+  const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+  });
+}
 
-// import {  doc, setDoc, getDoc } from "firebase-admin/firestore";
 
-
-const serviceAccount = JSON.parse(
-  fs.readFileSync(path.join(process.cwd(), "firebase/firebaseServiceAccount.json"))
-);
-
+const db = getFirestore();
 
 
 
 
 
 // S'assurer que Firebase Admin est initialisé
-if (!admin.apps.length) {
-  const serviceAccount = JSON.parse(
-    fs.readFileSync(path.resolve("firebase/firebaseServiceAccount.json"))
-  );
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-}
+
+
 
 export const startConversationWithUser = async (req, res) => {
   try {
@@ -50,7 +40,6 @@ export const startConversationWithUser = async (req, res) => {
     }
 
     const convoId = `${userPhone}_${agentPhone}`;
-    const db = getFirestore();
     const convoRef = doc(db, "conversations", convoId);
     const convoSnap = await getDoc(convoRef);
 
@@ -59,6 +48,7 @@ export const startConversationWithUser = async (req, res) => {
         userPhone,
         agentPhone,
         messages: [],
+        createdAt: Timestamp.now(), // (optionnel mais conseillé)
       });
     }
 
@@ -68,7 +58,6 @@ export const startConversationWithUser = async (req, res) => {
     res.status(500).json({ msg: "Erreur serveur." });
   }
 };
-
 
 
 
@@ -181,14 +170,7 @@ export const toggleSupervisorStatus = async (req, res) => {
 
 
 
-// ✅ Créer un agent (rôle : "agent")
 
-// ✅ Initialiser Firebase Admin une seule fois
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-  });
-}
 
 export const createAgent = async (req, res) => {
   try {
