@@ -18,19 +18,19 @@
 
 
 
+
 import admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
-import { readFileSync } from "fs";
 
-const serviceAccount = JSON.parse(
-  readFileSync("./firebase/firebaseServiceAccount.json", "utf-8")
-);
+// 🔐 Lire la variable d’environnement Heroku (elle est une string JSON)
+const serviceAccount = JSON.parse(process.env.FIREBASE_CREDENTIALS);
 
+// ✅ Initialiser Firebase Admin SDK
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
   });
 }
 
-const db = getFirestore();
-export default db;
+const db = admin.firestore();
+
+export { admin, db };
