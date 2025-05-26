@@ -15,8 +15,10 @@
 // export default admin.firestore();
 
 
+
 import admin from "firebase-admin";
 
+// ✅ Lire la variable d’environnement au lieu du fichier
 const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
 
 if (!admin.apps.length) {
