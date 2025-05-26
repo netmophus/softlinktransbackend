@@ -16,10 +16,15 @@
 
 
 
-import admin from "firebase-admin";
 
-// ✅ Lire la variable d’environnement au lieu du fichier
-const serviceAccount = JSON.parse(process.env.FIREBASE_CONFIG);
+
+import admin from "firebase-admin";
+import { getFirestore } from "firebase-admin/firestore";
+import { readFileSync } from "fs";
+
+const serviceAccount = JSON.parse(
+  readFileSync("./firebase/firebaseServiceAccount.json", "utf-8")
+);
 
 if (!admin.apps.length) {
   admin.initializeApp({
@@ -27,4 +32,5 @@ if (!admin.apps.length) {
   });
 }
 
-export default admin.firestore();
+const db = getFirestore();
+export default db;
