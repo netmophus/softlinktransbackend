@@ -470,11 +470,11 @@ import CashMovement from "../models/CashMovement.js";
 
 
 import db from "../firebase/firebaseAdmin.js";
-import { Timestamp, doc, setDoc, getDoc } from "firebase-admin/firestore";
 
+import admin from "../firebase/firebaseAdmin.js";
 
-
-
+const db = admin.firestore();
+const Timestamp = admin.firestore.Timestamp;
 
 export const startConversationWithUser = async (req, res) => {
   try {
@@ -486,12 +486,12 @@ export const startConversationWithUser = async (req, res) => {
     }
 
     const convoId = `${userPhone}_${agentPhone}`;
-    // const db = getFirestore();
-    const convoRef = doc(db, "conversations", convoId);
-    const convoSnap = await getDoc(convoRef);
+    const convoRef = db.collection("conversations").doc(convoId);
 
-    if (!convoSnap.exists()) {
-      await setDoc(convoRef, {
+    const convoSnap = await convoRef.get();
+
+    if (!convoSnap.exists) {
+      await convoRef.set({
         userPhone,
         agentPhone,
         messages: [],
