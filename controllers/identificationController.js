@@ -7,6 +7,10 @@ import { uploadToCloudinary } from "../utils/uploadToCloudinary.js";
 
 export const createIdentification = async (req, res) => {
   try {
+
+    console.log("✔️ Fichiers reçus :", req.files);
+console.log("✔️ Champs reçus :", req.body);
+
     const {
       fullName,
       dateOfBirth,
