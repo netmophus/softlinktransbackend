@@ -4,3 +4,6 @@ receipts/
 # Ignorer les fichiers Firebase
 firebase/firebaseServiceAccount.json
 
+env.heroku 
+oneline.json 
+softlinktransbackend.git/ 
