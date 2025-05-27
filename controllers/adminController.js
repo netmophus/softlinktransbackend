@@ -468,12 +468,11 @@ import InternalSettlement from "../models/InternalSettlement.js";
 import CashRegister from "../models/CashRegister.js";
 import CashMovement from "../models/CashMovement.js";
 
-
-import db from "../firebase/firebaseAdmin.js";
-
 import admin from "../firebase/firebaseAdmin.js";
-
+const db = admin.firestore();
 const Timestamp = admin.firestore.Timestamp;
+
+
 
 export const startConversationWithUser = async (req, res) => {
   try {
@@ -619,6 +618,62 @@ export const toggleSupervisorStatus = async (req, res) => {
 // ✅ Créer un agent (rôle : "agent")
 
 
+// export const createAgent = async (req, res) => {
+//   try {
+//     const { name, phone, password, pin } = req.body;
+
+//     console.log("🧾 Données reçues :", req.body);
+
+//     if (!name || !phone || !password) {
+//       return res.status(400).json({ msg: "Nom, téléphone et mot de passe sont requis." });
+//     }
+
+//     // 🔍 Vérification si le téléphone est déjà utilisé
+//     const existingUser = await User.findOne({ phone });
+//     if (existingUser) {
+//       return res.status(400).json({ msg: "Ce numéro est déjà utilisé." });
+//     }
+
+//     // ✅ Création du compte MongoDB
+//     const newAgentData = {
+//       name,
+//       phone,
+//       password,
+//       role: "agent",
+//       isVerified: true,
+//       isActivated: true,
+//     };
+//     if (pin) newAgentData.pin = pin;
+
+//     const agent = new User(newAgentData);
+//     await agent.save();
+
+//     // ✅ Ensuite : enregistrement dans Firestore
+
+// await db.collection("agents").doc(phone).set({
+//   phone,
+//   name,
+//   createdAt: Timestamp.now(),
+// });
+
+
+//     res.status(201).json({
+//       msg: "Agent créé avec succès.",
+//       agent: {
+//         _id: agent._id,
+//         name: agent.name,
+//         phone: agent.phone,
+//         createdAt: agent.createdAt,
+//       },
+//     });
+
+//   } catch (error) {
+//     console.error("❌ Erreur création agent :", error);
+//     res.status(500).json({ msg: "Erreur serveur lors de la création de l'agent." });
+//   }
+// };
+
+
 export const createAgent = async (req, res) => {
   try {
     const { name, phone, password, pin } = req.body;
@@ -635,7 +690,7 @@ export const createAgent = async (req, res) => {
       return res.status(400).json({ msg: "Ce numéro est déjà utilisé." });
     }
 
-    // ✅ Création du compte MongoDB
+    // ✅ Création du compte dans MongoDB
     const newAgentData = {
       name,
       phone,
@@ -649,14 +704,14 @@ export const createAgent = async (req, res) => {
     const agent = new User(newAgentData);
     await agent.save();
 
-    // ✅ Ensuite : enregistrement dans Firestore
+    // ✅ Connexion à Firestore
+    const db = admin.firestore();
 
-await db.collection("agents").doc(phone).set({
-  phone,
-  name,
-  createdAt: Timestamp.now(),
-});
-
+    await db.collection("agents").doc(phone).set({
+      phone,
+      name,
+      createdAt: admin.firestore.Timestamp.now(),
+    });
 
     res.status(201).json({
       msg: "Agent créé avec succès.",
@@ -673,9 +728,6 @@ await db.collection("agents").doc(phone).set({
     res.status(500).json({ msg: "Erreur serveur lors de la création de l'agent." });
   }
 };
-
-
-
 
 
 // ✅ Obtenir tous les agents (triés du plus récent au plus ancien)
