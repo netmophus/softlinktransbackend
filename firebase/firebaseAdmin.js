@@ -33,4 +33,9 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-export { admin, db };
+// ✅ Export par défaut pour éviter l’erreur d'import
+export default admin;
+
+// ✅ Export facultatif pour réutiliser la base
+export { db };
+
